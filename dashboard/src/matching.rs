@@ -18,22 +18,47 @@ pub fn full(sources: &[Daily], year: i32, day: u32, cumulative: bool) -> bool {
         exact(sources, year, day, false).is_some_and(|d| d.complete)
             && (day == 1 || full(sources, year, day - 1, true))
     } else {
-        exact(sources, year, day, true).is_some_and(|d| d.complete)
-            && (day == 1 || full(sources, year, day - 1, true))
+        let Some(now) = exact(sources, year, day, true).filter(|d| d.complete) else {
+            return false;
+        };
+        if day == 1 {
+            return true;
+        }
+        if !full(sources, year, day - 1, true) {
+            return false;
+        }
+        // A complete roster can contain a downward revision. That precinct's
+        // daily difference is unknown, not an implicit zero in a complete day.
+        counts(sources, year, day - 1, true).is_some_and(|previous| {
+            previous
+                .iter()
+                .all(|(id, prior)| now.counts.get(id).copied().unwrap_or(0) >= *prior)
+        })
     }
 }
 pub fn counts(sources: &[Daily], year: i32, day: u32, cumulative: bool) -> Option<Counts> {
+    let universe = sources
+        .iter()
+        .filter(|s| s.date.year() == year)
+        .flat_map(|s| s.counts.keys().cloned())
+        .collect();
+    counts_with_ids(sources, year, day, cumulative, &universe)
+}
+
+pub(crate) fn counts_with_ids(
+    sources: &[Daily],
+    year: i32,
+    day: u32,
+    cumulative: bool,
+    universe: &BTreeSet<String>,
+) -> Option<Counts> {
     if !(1..=12).contains(&day) {
         return None;
     }
     if let Some(d) = exact(sources, year, day, cumulative) {
         let mut counts = d.counts.clone();
         if d.complete {
-            for id in sources
-                .iter()
-                .filter(|s| s.date.year() == year)
-                .flat_map(|s| s.counts.keys())
-            {
+            for id in universe {
                 counts.entry(id.clone()).or_default();
             }
         }
@@ -41,39 +66,41 @@ pub fn counts(sources: &[Daily], year: i32, day: u32, cumulative: bool) -> Optio
     }
     if cumulative {
         let now = exact(sources, year, day, false)?;
+        let now_counts = counts_with_ids(sources, year, day, false, universe)?;
         if day == 1 {
-            return counts(sources, year, day, false);
+            return counts_with_ids(sources, year, day, false, universe);
         }
-        let previous = counts(sources, year, day - 1, true)?;
+        let previous = counts_with_ids(sources, year, day - 1, true, universe)?;
         let prior_full = full(sources, year, day - 1, true);
-        let universe: BTreeSet<_> = previous.keys().chain(now.counts.keys()).cloned().collect();
+        let universe: BTreeSet<_> = previous.keys().chain(now_counts.keys()).cloned().collect();
         let mut result = Counts::new();
         for id in universe {
             if (prior_full || previous.contains_key(&id))
-                && (now.complete || now.counts.contains_key(&id))
+                && (now.complete || now_counts.contains_key(&id))
             {
                 result.insert(
                     id.clone(),
                     previous.get(&id).copied().unwrap_or(0)
-                        + now.counts.get(&id).copied().unwrap_or(0),
+                        + now_counts.get(&id).copied().unwrap_or(0),
                 );
             }
         }
         return Some(result);
     }
     let now = exact(sources, year, day, true)?;
+    let now_counts = counts_with_ids(sources, year, day, true, universe)?;
     if day == 1 {
-        return Some(now.counts.clone());
+        return Some(now_counts);
     }
-    let previous = counts(sources, year, day - 1, true)?;
+    let previous = counts_with_ids(sources, year, day - 1, true, universe)?;
     let prior_full = full(sources, year, day - 1, true);
-    let universe: BTreeSet<_> = now.counts.keys().chain(previous.keys()).cloned().collect();
+    let universe: BTreeSet<_> = now_counts.keys().chain(previous.keys()).cloned().collect();
     Some(
         universe
             .into_iter()
             .filter_map(|id| {
                 let a = previous.get(&id).copied().or(prior_full.then_some(0))?;
-                let b = now.counts.get(&id).copied().or(now.complete.then_some(0))?;
+                let b = now_counts.get(&id).copied().or(now.complete.then_some(0))?;
                 b.checked_sub(a).map(|n| (id, n))
             })
             .collect(),
@@ -86,8 +113,18 @@ pub fn period(
     day: u32,
     cumulative: bool,
 ) -> Option<Period> {
-    let mut old = counts(sources, 2024, day, cumulative)?;
-    let mut new = counts(sources, 2026, day, cumulative)?;
+    let old_ids = reference
+        .groups
+        .iter()
+        .flat_map(|g| g.old.iter().cloned())
+        .collect();
+    let new_ids = reference
+        .groups
+        .iter()
+        .flat_map(|g| g.new.iter().cloned())
+        .collect();
+    let mut old = counts_with_ids(sources, 2024, day, cumulative, &old_ids)?;
+    let mut new = counts_with_ids(sources, 2026, day, cumulative, &new_ids)?;
     if full(sources, 2024, day, cumulative) {
         for id in reference.groups.iter().flat_map(|g| &g.old) {
             old.entry(id.clone()).or_default();

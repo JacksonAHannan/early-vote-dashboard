@@ -14,7 +14,7 @@ use std::{
 
 const CURRENT: &str = "https://goelect.txelections.civixapps.com/api-ivis-system/api/v1/getFile";
 const HISTORICAL: &str = "https://earlyvoting.texas-election.com/Elections/getEVDetails.do";
-const SCOPE: &str = "Official Texas SOS and independently corroborated county aggregates. Mail means the source's reported returned-mail voters, not ballots issued or requested. Combined turnout adds reported mail and early in-person votes for the same county and date in both cycles. Native cumulative totals include mail received before early in-person voting opened. Daily mail is the nonnegative change from the preceding calendar day's cumulative report; missing prior reports and downward revisions remain unavailable. County ordinary-precinct series may have narrower categories and different totals. Current native daily in-person zeros are unconfirmed and remain unavailable unless independently corroborated.";
+const SCOPE: &str = "Official Texas SOS and independently corroborated county aggregates. Mail means the source's reported returned-mail voters, not ballots issued or requested. Combined turnout adds reported mail and early in-person votes for the same county and date in both cycles. Native cumulative totals include mail received before early in-person voting opened. Daily mail is the nonnegative change from the preceding calendar day's cumulative report; missing prior reports and downward revisions remain unavailable. County ordinary-precinct series may have narrower categories and different totals. Current native mail zeros are unconfirmed. Current native zero daily in-person reports cannot certify that date's cumulative total: the feed can repeat the prior day's total. Unconfirmed values remain unavailable unless independently corroborated; other dates and methods remain usable.";
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct MethodValues {
@@ -560,13 +560,9 @@ fn fields(
         return (None, None, None, "unavailable".into());
     };
     if current && row.votes == Some(0) {
-        // No per-county reporting flag exists. Preserve known positive cumulative independently.
-        return (
-            None,
-            row.cumulative.filter(|value| *value > 0),
-            row.registered,
-            "zero_unconfirmed".into(),
-        );
+        // The feed can copy yesterday's positive cumulative into an unreported
+        // date. Neither value establishes a completed report for this date.
+        return (None, None, row.registered, "zero_unconfirmed".into());
     }
     (
         row.votes,
@@ -703,13 +699,15 @@ fn mail_values(
     row: Option<&Aggregate>,
     prior: Option<&Aggregate>,
     future: bool,
+    current: bool,
 ) -> (Option<u64>, Option<u64>) {
     if future {
         return (None, None);
     }
-    let cumulative = row.and_then(|r| r.mail_cumulative);
+    let reported = |r: &Aggregate| r.mail_cumulative.filter(|n| !current || *n > 0);
+    let cumulative = row.and_then(reported);
     let daily = cumulative
-        .zip(prior.and_then(|r| r.mail_cumulative))
+        .zip(prior.and_then(reported))
         .and_then(|(now, before)| now.checked_sub(before));
     (daily, cumulative)
 }
@@ -755,6 +753,7 @@ fn assemble(caches: &[Cache], through: NaiveDate, errors: Vec<SourceError>) -> R
                             .get(&(2024, date_2024 - Duration::days(1), state_id))
                             .copied(),
                         false,
+                        false,
                     );
                     let (mail_daily_2026, mail_cumulative_2026) = mail_values(
                         current,
@@ -762,6 +761,7 @@ fn assemble(caches: &[Cache], through: NaiveDate, errors: Vec<SourceError>) -> R
                             .get(&(2026, date_2026 - Duration::days(1), state_id))
                             .copied(),
                         date_2026 > through,
+                        true,
                     );
                     let by_method = BTreeMap::from([
                         (
@@ -876,8 +876,7 @@ pub async fn refresh(client: &reqwest::Client, root: &Path, through: NaiveDate) 
     Ok(data)
 }
 
-/// Rebuild using retained native aggregates without making a source request.
-pub fn rebuild(root: &Path, through: NaiveDate) -> Result<Data> {
+fn cached(root: &Path, through: NaiveDate, migrate: bool) -> Result<Data> {
     let mut caches = Vec::new();
     let mut errors = Vec::new();
     for year in [2024, 2026] {
@@ -887,7 +886,11 @@ pub fn rebuild(root: &Path, through: NaiveDate) -> Result<Data> {
                 continue;
             }
             match read_cache(root, year, date) {
-                Ok(cache) => caches.push(upgraded_cache(root, cache.clone()).unwrap_or(cache)),
+                Ok(cache) => caches.push(if migrate {
+                    upgraded_cache(root, cache.clone()).unwrap_or(cache)
+                } else {
+                    cache
+                }),
                 Err(error) => errors.push(SourceError {
                     year,
                     date,
@@ -898,7 +901,29 @@ pub fn rebuild(root: &Path, through: NaiveDate) -> Result<Data> {
             }
         }
     }
-    let data = assemble(&caches, through, errors)?;
+    assemble(&caches, through, errors)
+}
+
+/// Reapply current qualification to retained native counts without writing files.
+/// Derived statewide snapshots may have been produced by an older application.
+pub fn from_cache(root: &Path, saved: &Data) -> Result<Data> {
+    let mut data = cached(root, saved.through, false)?;
+    data.generated_at = saved.generated_at.clone();
+    for error in &saved.errors {
+        if !data
+            .errors
+            .iter()
+            .any(|e| e.year == error.year && e.date == error.date)
+        {
+            data.errors.push(error.clone());
+        }
+    }
+    Ok(data)
+}
+
+/// Rebuild using retained native aggregates without making a source request.
+pub fn rebuild(root: &Path, through: NaiveDate) -> Result<Data> {
+    let data = cached(root, through, true)?;
     atomic(
         &root.join("data/statewide.json"),
         &serde_json::to_vec(&data)?,
@@ -981,7 +1006,7 @@ mod tests {
     }
 
     #[test]
-    fn ambiguous_current_zero_keeps_known_cumulative_and_historical_zero() {
+    fn ambiguous_current_zero_does_not_certify_a_stale_cumulative_report() {
         let row = Aggregate {
             state_id: 1,
             name: "A".into(),
@@ -993,11 +1018,118 @@ mod tests {
         let fields = super::fields(Some(&row), false, true);
         assert_eq!(
             (fields.0, fields.1, fields.2, fields.3.as_str()),
-            (None, Some(12), Some(20), "zero_unconfirmed")
+            (None, None, Some(20), "zero_unconfirmed")
         );
         assert_eq!(super::fields(Some(&row), false, false).0, Some(0));
         assert_eq!(super::fields(Some(&row), true, true).1, None);
         assert_eq!(super::fields(None, false, true).3, "unavailable");
+    }
+
+    #[test]
+    fn unconfirmed_mail_zero_is_local_to_its_date_and_method() {
+        let mut caches = Vec::new();
+        for year in [2024, 2026] {
+            for offset in [-1, 0, 1] {
+                let mut c = cache(year, start(year) + Duration::days(offset));
+                c.rows[0].mail_cumulative = Some(if offset < 1 { 0 } else { 3 });
+                caches.push(c);
+            }
+        }
+        let data = assemble(&caches, start(2026) + Duration::days(1), vec![]).unwrap();
+        let mail = select_method(data.clone(), "mail").unwrap();
+        assert_eq!(mail.counties[0].days[0].cumulative_2024, Some(0));
+        assert_eq!(mail.counties[0].days[0].votes_2024, Some(0));
+        assert_eq!(mail.counties[0].days[0].cumulative_2026, None);
+        assert_eq!(mail.counties[0].days[0].votes_2026, None);
+        assert_eq!(mail.counties[0].days[1].cumulative_2026, Some(3));
+        assert_eq!(mail.counties[0].days[1].votes_2026, None);
+        assert_eq!(data.counties[0].days[0].cumulative_2026, None);
+        assert_eq!(data.counties[0].days[1].cumulative_2026, Some(23));
+        assert_eq!(data.counties[1].days[0].cumulative_2026, Some(23));
+        let person = select_method(data, "in_person").unwrap();
+        assert_eq!(person.counties[0].days[0].cumulative_2026, Some(20));
+    }
+
+    #[test]
+    fn independent_dated_control_can_restore_a_native_zero_report() {
+        let old = cache(2024, start(2024));
+        let mut current = cache(2026, start(2026));
+        current.rows[0].votes = Some(0);
+        current.rows[0].cumulative = Some(12);
+        let raw = assemble(&[old, current], start(2026), vec![]).unwrap();
+        let controls = crate::quality::Report {
+            controls: vec![crate::quality::Control {
+                county: "county1".into(),
+                year: 2026,
+                date: start(2026),
+                daily: Some(0),
+                cumulative: Some(12),
+                source: "independent county report".into(),
+                sha256: "a".repeat(64),
+                retrieved_at: String::new(),
+                scope: "in_person".into(),
+                completed: true,
+                note: String::new(),
+                precinct_total: None,
+                precinct_source: None,
+                precinct_sha256: None,
+            }],
+            ..Default::default()
+        };
+        let person = controls.statewide(select_method(raw.clone(), "in_person").unwrap());
+        assert_eq!(person.counties[0].days[0].votes_2026, Some(0));
+        assert_eq!(person.counties[0].days[0].cumulative_2026, Some(12));
+        let combined = with_county_in_person(raw, &person, "total").unwrap();
+        assert_eq!(combined.counties[0].days[0].cumulative_2026, Some(15));
+    }
+
+    #[test]
+    fn retained_old_derivations_are_requalified_without_a_download_or_write() {
+        let root = std::env::temp_dir().join(format!(
+            "turnout-retained-qualification-{}-{}",
+            std::process::id(),
+            Utc::now().timestamp_nanos_opt().unwrap()
+        ));
+        let mut caches = Vec::new();
+        for year in [2024, 2026] {
+            for offset in [-1, 0] {
+                let mut c = cache(year, start(year) + Duration::days(offset));
+                c.schema_version = 2;
+                c.rows[0].mail_cumulative = Some(0);
+                if year == 2026 {
+                    c.rows[0].votes = Some(0);
+                    c.rows[0].cumulative = Some(12);
+                }
+                let raw = format!("anonymous retained fixture {year} {offset}").into_bytes();
+                c.source.sha256 = format!("{:x}", Sha256::digest(&raw));
+                persist_cache(&root, &c, &raw).unwrap();
+                caches.push(c);
+            }
+        }
+        let mut saved = assemble(&caches, start(2026), vec![]).unwrap();
+        saved.generated_at = "unchanged source generation".into();
+        // Simulate the values serialized by the previous application.
+        let d = &mut saved.counties[0].days[0];
+        d.by_method.get_mut("mail").unwrap().cumulative_2026 = Some(0);
+        d.by_method.get_mut("in_person").unwrap().cumulative_2026 = Some(12);
+        d.by_method.get_mut("total").unwrap().cumulative_2026 = Some(12);
+        d.cumulative_2026 = Some(12);
+        let path = root.join("data/statewide.json");
+        let bytes = serde_json::to_vec(&saved).unwrap();
+        std::fs::write(&path, &bytes).unwrap();
+        let qualified = from_cache(&root, &saved).unwrap();
+        assert_eq!(qualified.generated_at, saved.generated_at);
+        assert_eq!(qualified.counties[0].days[0].cumulative_2026, None);
+        assert_eq!(qualified.counties[1].days[0].cumulative_2026, Some(23));
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        for c in &caches {
+            assert_eq!(
+                read_cache(&root, c.year, c.date).unwrap().source.sha256,
+                c.source.sha256
+            );
+            assert!(response_path(&root, c).exists());
+        }
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

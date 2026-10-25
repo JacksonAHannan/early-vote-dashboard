@@ -41,6 +41,13 @@ fn agrees(actual: u64, expected: u64) -> bool {
     actual == expected || expected > 1 && actual.abs_diff(expected) <= 1
 }
 
+// This immutable Harris 2024 archive omits residence precincts with positive
+// same-day official SOS observations, even on a date whose county totals agree.
+// Keep its explicit observations, but never certify its omissions as zeros.
+// Source hashes and the live recheck are in sources/texas-stress/source-findings.md.
+const HARRIS_2024_UNCONFIRMED_ZEROS: &str =
+    "b070ed9b8064425482f7fc9cee62ac801d2c3fd913a4376ae60fb4b8eaac7d49";
+
 impl Report {
     pub fn load(root: &Path) -> Result<Self> {
         let bytes = std::fs::read(root.join("data/completeness.json"))
@@ -72,7 +79,7 @@ impl Report {
     }
 
     /// Keep every usable dated observation. Completion controls establish zeros,
-    /// not whole-county admission. Mature historical reports are final baselines.
+    /// not whole-county admission. Historical age alone cannot establish zeros.
     pub fn sources(&self, _county: &str, sources: &[Daily]) -> Vec<Daily> {
         sources
             .iter()
@@ -85,8 +92,9 @@ impl Report {
                 if d.date.year()==2026 && let Some(n)=expected && !agrees(d.counts.values().sum(),n) && !d.note.to_lowercase().contains("county control") {
                     d.note.push_str(&format!(" County control reports {n} votes; this source reports {}. Matched precinct counts use reported observations and remain subject to revision.",d.counts.values().sum::<u64>()));
                 }
-                d.complete = d.date.year() == 2024
-                    || expected.is_some_and(|n| agrees(d.counts.values().sum(), n));
+                d.complete = expected.is_some_and(|n| d.counts.values().sum::<u64>() == n)
+                    && d.counts.get("UNASSIGNED").copied().unwrap_or(0) == 0
+                    && d.sha256 != HARRIS_2024_UNCONFIRMED_ZEROS;
                 d
             })
             .collect()
@@ -281,12 +289,58 @@ mod tests {
         assert!(!accepted[0].complete);
         let mut old = d;
         old.date = start(2024);
-        assert!(Report::default().sources("x", &[old])[0].complete);
+        assert!(!Report::default().sources("x", &[old])[0].complete);
     }
     #[test]
     fn ambiguous_zero_is_not_confirmed_by_reconciliation_tolerance() {
         assert!(!agrees(1, 0));
         assert!(!agrees(0, 1));
         assert!(agrees(479408, 479409));
+    }
+
+    #[test]
+    fn historical_age_does_not_prove_an_absent_precinct_had_zero_votes() {
+        let mut d = Daily {
+            complete: true,
+            county: "x".into(),
+            date: start(2024),
+            counts: crate::Counts::from([("1".into(), 10)]),
+            source: "official".into(),
+            sha256: "a".repeat(64),
+            retrieved_at: String::new(),
+            note: String::new(),
+            cumulative: false,
+        };
+        assert!(!Report::default().sources("x", &[d.clone()])[0].complete);
+        let mut report = Report {
+            controls: vec![Control {
+                county: "x".into(),
+                year: 2024,
+                date: start(2024),
+                daily: Some(11),
+                cumulative: Some(11),
+                source: "independent total".into(),
+                sha256: "b".repeat(64),
+                retrieved_at: String::new(),
+                scope: "in_person".into(),
+                completed: true,
+                note: String::new(),
+                precinct_total: None,
+                precinct_source: None,
+                precinct_sha256: None,
+            }],
+            ..Default::default()
+        };
+        // A missing voter is not rounding precision when certifying a zero precinct.
+        assert!(!report.sources("x", &[d.clone()])[0].complete);
+        report.controls[0].daily = Some(10);
+        assert!(report.sources("x", &[d.clone()])[0].complete);
+        d.sha256 = HARRIS_2024_UNCONFIRMED_ZEROS.into();
+        assert!(!report.sources("x", &[d.clone()])[0].complete);
+        d.sha256 = "a".repeat(64);
+        // An unassigned voter could belong to any precinct absent from the roster.
+        d.counts.insert("UNASSIGNED".into(), 1);
+        report.controls[0].daily = Some(11);
+        assert!(!report.sources("x", &[d])[0].complete);
     }
 }

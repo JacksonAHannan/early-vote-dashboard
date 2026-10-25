@@ -128,7 +128,16 @@ pub fn merge_sources(values: impl IntoIterator<Item = Daily>) -> Vec<Daily> {
 }
 
 fn resolve(sources: &[Daily], year: i32, observed: u32) -> (Vec<ResolvedDay>, Vec<String>) {
-    let values = resolved_matching(sources, year, observed);
+    resolve_with_ids(sources, year, observed, &BTreeSet::new())
+}
+
+fn resolve_with_ids(
+    sources: &[Daily],
+    year: i32,
+    observed: u32,
+    ids: &BTreeSet<String>,
+) -> (Vec<ResolvedDay>, Vec<String>) {
+    let values = resolved_matching(sources, year, observed, ids);
     let mut issues = vec![];
     for day in 2..=CALENDAR_DAYS {
         if year == 2026 && day > observed {
@@ -393,15 +402,30 @@ fn populate(bucket: &mut Bucket, index: Option<usize>, series: &[CountySeries<'_
     }
 }
 
-fn resolved_matching(sources: &[Daily], year: i32, observed: u32) -> Vec<ResolvedDay> {
+fn resolved_matching(
+    sources: &[Daily],
+    year: i32,
+    observed: u32,
+    ids: &BTreeSet<String>,
+) -> Vec<ResolvedDay> {
+    let universe = ids
+        .iter()
+        .cloned()
+        .chain(
+            sources
+                .iter()
+                .filter(|s| s.date.year() == year)
+                .flat_map(|s| s.counts.keys().cloned()),
+        )
+        .collect();
     (1..=CALENDAR_DAYS)
         .map(|day| {
             if year == 2026 && day > observed {
                 return ResolvedDay::default();
             }
             ResolvedDay {
-                daily: crate::matching::counts(sources, year, day, false),
-                cumulative: crate::matching::counts(sources, year, day, true),
+                daily: crate::matching::counts_with_ids(sources, year, day, false, &universe),
+                cumulative: crate::matching::counts_with_ids(sources, year, day, true, &universe),
                 daily_complete: crate::matching::full(sources, year, day, false),
                 cumulative_complete: crate::matching::full(sources, year, day, true),
             }
@@ -451,15 +475,23 @@ pub fn analyze(
                 .flat_map(|h| h.sources.iter().cloned())
                 .chain(c.sources.iter().cloned()),
         );
-        let (old, mut issues) = resolve(&sources, 2024, snapshot.days);
-        let (new, new_issues) = resolve(&sources, 2026, snapshot.days);
-        issues.extend(new_issues);
         let latest = c.periods.iter().max_by_key(|p| p.day);
         let reference_groups = if c.reference_groups.is_empty() {
             latest.map(|p| p.groups.as_slice()).unwrap_or_default()
         } else {
             &c.reference_groups
         };
+        let old_ids = reference_groups
+            .iter()
+            .flat_map(|g| g.old.iter().cloned())
+            .collect();
+        let new_ids = reference_groups
+            .iter()
+            .flat_map(|g| g.new.iter().cloned())
+            .collect();
+        let (old, mut issues) = resolve_with_ids(&sources, 2024, snapshot.days, &old_ids);
+        let (new, new_issues) = resolve_with_ids(&sources, 2026, snapshot.days, &new_ids);
+        issues.extend(new_issues);
         let eligible: Vec<_> = reference_groups
             .iter()
             .filter(|g| cohort != "unchanged" || g.unchanged)

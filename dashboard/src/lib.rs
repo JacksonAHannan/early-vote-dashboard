@@ -354,18 +354,35 @@ pub fn analyze(reference: &Reference, old: &Counts, new: &Counts, day: u32) -> R
             bucket: band,
             unchanged: strict && band.is_some(),
             reason: reason.into(),
-            harris: group
+            // Partial returns cannot establish a group's partisan share or winner.
+            // Zero/zero is the existing unknown convention; demographic All views
+            // retain the group's valid turnout and population observations.
+            harris: if group
                 .old
                 .iter()
-                .filter_map(|p| reference.presidential.get(p))
-                .map(|p| p.harris)
-                .sum(),
-            trump: group
+                .all(|p| reference.presidential.contains_key(p))
+            {
+                group
+                    .old
+                    .iter()
+                    .map(|p| reference.presidential[p].harris)
+                    .sum()
+            } else {
+                0
+            },
+            trump: if group
                 .old
                 .iter()
-                .filter_map(|p| reference.presidential.get(p))
-                .map(|p| p.trump)
-                .sum(),
+                .all(|p| reference.presidential.contains_key(p))
+            {
+                group
+                    .old
+                    .iter()
+                    .map(|p| reference.presidential[p].trump)
+                    .sum()
+            } else {
+                0
+            },
         });
     }
     for b in &mut buckets {

@@ -26,6 +26,7 @@ from urllib.parse import urlencode
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[2]
+DATA_ROOT = Path(os.environ.get('TURNOUT_AUDIT_ROOT', ROOT))
 OUT = ROOT / 'analysis/mail-turnout/qa'
 TAG = os.environ.get('TURNOUT_TEST_TAG', '')
 if TAG:
@@ -90,19 +91,19 @@ def number(value):
 class TexasSources:
     """Start with immutable publisher bytes, not API or derived by_method values."""
     def __init__(self):
-        self.state = json.loads((ROOT / 'dashboard/data/statewide.json').read_text())
+        self.state = json.loads((DATA_ROOT / 'dashboard/data/statewide.json').read_text())
         self.through = self.state['through']
         self.observed = (dt.date.fromisoformat(self.through) - dt.date(2026, 10, 19)).days + 1
-        self.reference = json.loads((ROOT / 'dashboard/data/county-reference.json').read_text())
+        self.reference = json.loads((DATA_ROOT / 'dashboard/data/county-reference.json').read_text())
         self.ids = {c['state_id']: c['id'] for c in self.state['counties']}
         self.names = {canonical(c['name']): c['id'] for c in self.state['counties']}
         self.native = {}
         self.controls = {}
-        for row in json.loads((ROOT / 'dashboard/data/completeness.json').read_text())['controls']:
+        for row in json.loads((DATA_ROOT / 'dashboard/data/completeness.json').read_text())['controls']:
             if row['completed'] and row['scope'] == 'in_person':
                 self.controls[row['county'], row['date']] = row
         for year in (2024, 2026):
-            directory = ROOT / f'dashboard/data/statewide-cache/{year}'
+            directory = DATA_ROOT / f'dashboard/data/statewide-cache/{year}'
             for file in sorted(directory.glob('????-??-??.json')):
                 cache = json.loads(file.read_text())
                 source = cache['source']
@@ -186,7 +187,7 @@ class TexasSources:
             return None
         value = row[measure]
         if date.startswith('2026') and row['daily'] == 0:
-            value = None if measure == 'daily' or not value else value
+            value = None
         control = self.controls.get((county, date))
         if control and control[measure] is not None:
             value = control[measure]
@@ -199,9 +200,13 @@ class TexasSources:
             return None
         row = self.source(county, stamp)
         mail = None if row is None else row['mail']
+        if year == 2026 and mail == 0:
+            mail = None
         if measure == 'daily':
             previous = self.source(county, (date - dt.timedelta(days=1)).isoformat())
             before = None if previous is None else previous['mail']
+            if year == 2026 and before == 0:
+                before = None
             mail = mail - before if mail is not None and before is not None and mail >= before else None
         if method == 'mail':
             return mail

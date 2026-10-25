@@ -1,5 +1,5 @@
 'use strict';
-let data=null,census=null,primary=null,references=null,referenceByCounty=new Map(),matrixPage=0,day=4,county='all',cohort='matched',selected='travis',bucket=null,sort='votes_2026',descending=true,page=0,mode='partisan',metricId='hispanic_vap',demoViews=null,demoKey='',demoPending='',selection=null,regressionWinner='all';
+let data=null,dataEpoch=0,census=null,primary=null,references=null,referenceByCounty=new Map(),matrixPage=0,day=4,county='all',cohort='matched',selected='travis',bucket=null,sort='votes_2026',descending=true,page=0,mode='partisan',metricId='hispanic_vap',demoViews=null,demoKey='',demoPending='',selection=null,regressionWinner='all';
 const $=id=>document.getElementById(id);
 const colors=['#285b91','#9ec3e5','#deebf7','#fae1dc','#e6a69a','#a84236'];
 const primaryColors=['#a84236','#d88f85','#f0eff2','#84afd3','#285b91'];
@@ -11,10 +11,11 @@ const period=c=>{const p=c?.periods.find(p=>p.day===day);return p?.coverage?.ava
 const classification=()=>mode==='primary'?primary:census;
 const activeMetricId=()=>mode==='primary'?'primary_dem_share':metricId;
 const metric=()=>classification()?.metrics.find(m=>m.id===activeMetricId());
-const demoSignature=()=>`${data?.generated_at}|${day}|${cohort}|${mode}|${activeMetricId()}`;
+const demoSignature=()=>`${data?.generated_at}|${day}|${cohort}|${mode}|${activeMetricId()}|${dataEpoch}`;
 const demoReady=()=>demoKey===demoSignature()&&demoViews;
 const small=c=>c.groups<3||c.votes_2024<100;
 function dates(p){const range=(first,iso)=>{const d=Number(iso.slice(-2));return iso.slice(5,7)==='10'?(d===first?`Oct ${first}`:`Oct ${first}–${d}`):`Oct ${first}–Nov ${d}`;};return `${range(19,p.through_2026)}, 2026 / ${range(21,p.through_2024)}, 2024`;}
+const comparisonPeriod=(n=day)=>({through_2026:new Date(Date.UTC(2026,9,18+n)).toISOString().slice(0,10),through_2024:new Date(Date.UTC(2024,9,20+n)).toISOString().slice(0,10)});
 const eligible=g=>g.available!==false&&(cohort==='unchanged'?g.unchanged:(mode!=='partisan'||g.bucket!==null));
 function presidentialComplete(c,g){const ref=referenceByCounty.get(c.id);return ref?g.old.every(id=>Object.hasOwn(ref.presidential,id)):g.reason!=='Missing or tied presidential return';}
 function presidentialShare(c,g){return presidentialComplete(c,g)&&g.harris+g.trump>0?100*g.harris/(g.harris+g.trump):null;}
@@ -40,12 +41,17 @@ function updateView(){if(mode!=='partisan'&&!demoReady())ensureDemo();render();}
 function selectDetail(id,b=null){selected=id;bucket=b;page=0;selection=null;Atlas.active=null;Atlas.native=null;if(Atlas.initialized&&Atlas.county!==id)Atlas.showCounty(id,true);window.Navigation?.show('precincts','explore');render();}
 function selectPoint(id,index,precinct=null,zoom=true){selected=id;bucket=null;selection={county:id,group_index:index,precinct};page=0;Atlas.update(atlasContext());Atlas.focus(id,index,precinct,zoom);regression();detail();}
 function atlasContext(){const bins=new Map();for(const c of data.counties)for(const g of groupRows(c))bins.set(g.id,g.view_bucket);return {data,census,classification:classification(),day,cohort,mode,metric:metric(),bucket,focusCounty:selected,bins,onSelect:selectPoint,onCounty:id=>{selected=id;selection=null;bucket=null;Atlas.ctx=atlasContext();regression();detail();},onClear:()=>{selection=null;bucket=null;Atlas.ctx=atlasContext();regression();detail();}};}
+function availableDays(){return window.Navigation?.level==='counties'?Math.max(data?.days||0,window.CountyView?.view?.observed_days||0,window.Tracking?.state?Tracking.stateObserved():0):data?.days||0;}
+function renderDayControls(){
+ if(!data)return;
+ $('days').innerHTML=Array.from({length:availableDays()},(_,i)=>`<button type="button" data-day="${i+1}" aria-pressed="${day===i+1}">Day ${i+1}</button>`).join('');
+ $('days').querySelectorAll('button').forEach(b=>b.onclick=()=>{day=+b.dataset.day;page=0;bucket=null;updateView();});
+}
 function render(){
  if(!data?.counties.length){$('matrix').innerHTML='<div class="empty">Waiting for the first official download…</div>';return;}
- $('days').innerHTML=Array.from({length:data.days},(_,i)=>`<button type="button" data-day="${i+1}" aria-pressed="${day===i+1}">Day ${i+1}</button>`).join('');
- $('days').querySelectorAll('button').forEach(b=>b.onclick=()=>{day=+b.dataset.day;page=0;bucket=null;updateView();});
+ renderDayControls();
  $('partisan-mode').setAttribute('aria-pressed',String(mode==='partisan'));$('demographic-mode').setAttribute('aria-pressed',String(mode==='demographic'));$('primary-mode').setAttribute('aria-pressed',String(mode==='primary'));$('metric').hidden=mode!=='demographic';
- const first=data.counties.map(period).find(Boolean);$('period').textContent=first?dates(first):`Day ${day}`;
+ $('period').textContent=dates(comparisonPeriod());
  $('bucket-title').textContent=mode!=='partisan'?`${metric()?.label||'Census'} precinct buckets`:'2024 presidential margin';
  const failures=data.counties.filter(c=>c.status!=='current'&&(county==='all'||c.id===county));$('source-errors').hidden=!failures.length;$('source-errors-summary').textContent=`${failures.length} ${failures.length===1?'county has':'counties have'} partial or delayed precinct reports`;$('error').hidden=!failures.length;$('error').textContent=failures.map(c=>`${c.name}: ${c.status==='stale'?'using available reported precincts':'data unavailable'} (${c.error||'source not posted'})`).join(' · ');
  renderMatrix();regression();detail();
@@ -130,11 +136,17 @@ function regression(){
  for(const circle of circles){const point=points[+circle.dataset.index],readout=()=>{$('point-readout').textContent=`${point.county} / ${point.precincts.replaceAll(';',', ')} / ${point.y.toFixed(1)}% of 2024`;};circle.onclick=()=>selectPoint(point.countyId,point.group);circle.onpointerenter=()=>{readout();Atlas.hover(point.countyId,point.group);};circle.onpointerleave=()=>Atlas.hover(null,null);circle.onfocus=()=>{readout();Atlas.hover(point.countyId,point.group);};circle.onblur=()=>Atlas.hover(null,null);circle.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectPoint(point.countyId,point.group);}else if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();const next=(keyboardCircles.indexOf(circle)+(['ArrowLeft','ArrowUp'].includes(e.key)?-1:1)+keyboardCircles.length)%keyboardCircles.length;circles.forEach(c=>c.tabIndex=-1);keyboardCircles[next]?.setAttribute('tabindex','0');keyboardCircles[next]?.focus();}};}
  if(selection){const point=points.find(p=>p.id===activeId);$('point-readout').textContent=point?`${point.county} / ${point.precincts.replaceAll(';',', ')} / ${point.y.toFixed(1)}% of 2024`:'';}else $('point-readout').textContent='';
 }
+// Qualification can change without a new source snapshot timestamp.
+function invalidateComparisonViews(){
+ dataEpoch++;demoKey='';demoViews=null;
+ if(window.Tracking){Tracking.key='';Tracking.stateKey='';}
+ if(window.CountyView)CountyView.key='';
+}
 async function load(){
  try{const response=await fetch('/api/data',{cache:'no-store'});if(!response.ok)throw Error(`HTTP ${response.status}`);const incoming=await response.json(),first=!data;data=incoming;
   if(first){day=data.days||4;$('county').innerHTML='<option value="all">All precinct counties</option>'+data.counties.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');try{const results=await Promise.all([fetch('/api/demographics'),fetch('/api/primary'),fetch('/api/reference')]);if(results[0].ok)census=await results[0].json();if(results[1].ok)primary=await results[1].json();if(results[2].ok){references=await results[2].json();referenceByCounty=new Map(references.map(r=>[r.id,r]));}}catch(_){}$('primary-mode').disabled=!primary;if(census){$('metric').innerHTML=census.metrics.map(m=>`<option value="${m.id}">${esc(m.label)}${m.denominator==='vap'?' age 18+':''}</option>`).join('');$('metric').value=metricId;}else{$('demographic-mode').disabled=true;$('demographic-mode').title='Census data unavailable';}}
   if(data.generated_at)$('sync').textContent=`Updated ${new Date(data.generated_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'})}`;
-  Tracking.key='';Tracking.stateKey='';if(window.CountyView)CountyView.key='';updateView();
+  invalidateComparisonViews();updateView();
  }catch(error){$('error').hidden=false;$('error').textContent=`Download unavailable: ${error.message}. Retrying automatically.`;}
 }
 $('county').onchange=e=>{county=e.target.value;matrixPage=0;$('matrix-search').value='';if(county!=='all'){selected=county;selection=null;Atlas.active=null;Atlas.native=null;if(Atlas.initialized)Atlas.showCounty(county,true);}bucket=null;page=0;updateView();};

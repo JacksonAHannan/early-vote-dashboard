@@ -10,6 +10,7 @@ const Navigation=window.Navigation={
   $('precinct-trends-tab').setAttribute('aria-pressed',String(section==='trends'));$('precinct-explore-tab').setAttribute('aria-pressed',String(section==='explore'));
   if(write)history.replaceState(null,'',level==='counties'?'#counties':'#precinct-'+section);
   window.dispatchEvent(new Event('resize'));
+  if(data){const limit=availableDays();if(day>limit){day=limit;page=0;bucket=null;updateView();}else renderDayControls();}
   if(level==='counties')CountyView.update();
  },
  init(){
@@ -24,7 +25,7 @@ const CountyView=window.CountyView={
  metric(){return census?.metrics.find(m=>m.id===this.metricId);},
  label(){const m=this.metric();return this.mode==='partisan'?'2024 presidential margin':`${m?.label||'Demographic'}${m?.denominator==='vap'?' age 18+':''}`;},
  color(i){return this.mode==='partisan'?['#285b91','#4d80b4','#6e9cc7','#d18a7d','#be6658','#a84236'][i]:'#137b8a';},
- signature(){return data?`${data.generated_at}|${day}|${this.mode}|${this.metricId}|${this.votingMethod}`:'';},
+ signature(){return data?`${data.generated_at}|${day}|${this.mode}|${this.metricId}|${this.votingMethod}|${dataEpoch}`:'';},
  ready(){return this.view&&this.key===this.signature()&&(!this.pending||this.pending===this.key);},
  async update(){
   if(!data)return;
@@ -50,6 +51,7 @@ const CountyView=window.CountyView={
  },
  render(){
   if(!this.ready()||!Tracking.ctx)return;
+  renderDayControls();
   const buckets=this.view.buckets,panels=buckets.length===5?[...buckets,this.view.totals]:buckets,isDaily=this.measure==='daily',membership=isDaily?'groups':'cumulative_groups';
   $('county-daily-title').textContent=`${isDaily?'Daily':'Cumulative'} turnout by county bucket`;
   $('county-daily-section').dataset.mode=this.mode;

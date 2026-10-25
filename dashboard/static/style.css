@@ -48,3 +48,5 @@
 a.download[aria-disabled="true"]{opacity:.45;pointer-events:none}
 
 .regression-winner{display:inline-flex;gap:2px;align-items:center}.regression-winner button{font-size:12px;padding:5px 7px;border-color:transparent;background:transparent}.regression-winner button[aria-pressed=true]{background:#eee7f8;color:#6031a7}.regression-winner button:focus-visible{outline:2px solid #713bc2}.state-fit{flex-wrap:wrap;align-items:center}
+
+.support-form{margin:0}.sync .support-link{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid #e7c969;border-radius:6px;background:#fff8df;color:#5d460d;text-decoration:none;font-size:12px;font-weight:500;white-space:nowrap}.sync .support-link:hover{background:#fff1b9;border-color:#cfad46}.sync .support-link:focus-visible{outline:2px solid var(--accent);outline-offset:3px}.support-link svg{flex:none}@media(max-width:600px){.sync .support-link{font-size:11px;padding:6px 8px;gap:5px}}

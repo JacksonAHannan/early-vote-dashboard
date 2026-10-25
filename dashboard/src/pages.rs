@@ -105,7 +105,8 @@ pub fn qualified_statewide_method(
     snapshot: &Snapshot,
     method: &str,
 ) -> Result<statewide::Data> {
-    let raw: statewide::Data = read(root, "data/statewide.json")?;
+    let saved: statewide::Data = read(root, "data/statewide.json")?;
+    let raw = statewide::from_cache(root, &saved)?;
     let report = quality::Report::load(root).unwrap_or_default();
     let mut data = report.statewide(statewide::select_method(raw.clone(), "in_person")?);
     if method != "in_person" {
