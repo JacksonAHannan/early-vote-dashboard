@@ -1,0 +1,204 @@
+name: Refresh turnout and publish Pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      refresh_sources:
+        description: Refresh official sources before publishing
+        required: true
+        default: true
+        type: boolean
+  schedule:
+    - cron: '17,47 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pages.yml'
+      - 'dashboard/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: turnout-pages
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_TARGET_DIR: target
+  TURNOUT_ARCHIVE: .turnout-state/aggregate-state.tar.gz
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install collector tools
+        if: github.event_name != 'push' && (github.event_name != 'workflow_dispatch' || inputs.refresh_sources)
+        run: |
+          python3 -m pip install uv
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends poppler-utils
+          uv run --with playwright==1.64.1 python -m playwright install --with-deps chromium
+          browser_path="$(uv run --with playwright==1.64.1 python -c 'from playwright.sync_api import sync_playwright; p = sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          sudo ln -sf "$browser_path" /usr/bin/chromium
+
+      - name: Restore anonymous aggregate cache
+        id: aggregates
+        uses: actions/cache/restore@v6
+        with:
+          path: .turnout-state/aggregate-state.tar.gz
+          key: turnout-aggregates-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            turnout-aggregates-v1-
+
+      - name: Restore retained aggregate state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .turnout-state
+          if [[ -s "$TURNOUT_ARCHIVE" ]] && python3 dashboard/scripts/package_pages_state.py --restore "$TURNOUT_ARCHIVE"; then
+            echo 'Restored anonymous aggregates from Actions cache.'
+          else
+            if ! gh release download data-state --repo "$GITHUB_REPOSITORY" --pattern aggregate-state.tar.gz --dir .turnout-state --clobber; then
+              gh release download bootstrap --repo "$GITHUB_REPOSITORY" --pattern aggregate-state.tar.gz --dir .turnout-state --clobber
+            fi
+            python3 dashboard/scripts/package_pages_state.py --restore "$TURNOUT_ARCHIVE"
+          fi
+
+      - name: Restore Cargo cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: turnout-rust-${{ runner.os }}-${{ hashFiles('dashboard/Cargo.lock') }}
+          restore-keys: |
+            turnout-rust-${{ runner.os }}-
+
+      - name: Build Rust dashboard
+        run: |
+          rustup toolchain install stable --profile minimal
+          cargo +stable build --manifest-path dashboard/Cargo.toml --release --locked
+
+      - name: Refresh official sources
+        id: refresh
+        if: github.event_name != 'push' && (github.event_name != 'workflow_dispatch' || inputs.refresh_sources)
+        continue-on-error: true
+        timeout-minutes: 37
+        run: timeout --signal=TERM --kill-after=60s 35m target/release/texas-turnout refresh
+
+      - name: Record refresh outcome
+        env:
+          REFRESH_OUTCOME: ${{ steps.refresh.outcome }}
+        run: |
+          if [[ "$REFRESH_OUTCOME" == skipped ]]; then
+            echo 'Publishing validated retained data; source refresh intentionally skipped.'
+          elif [[ "$REFRESH_OUTCOME" != success ]]; then
+            echo '::warning::Source refresh did not complete. Export validation will check the retained aggregates before publication.'
+          fi
+          printf 'Source refresh: %s\n' "$REFRESH_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Export static dashboard
+        run: target/release/texas-turnout pages --output site
+
+      - name: Check published site size and entry point
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          root = Path('site')
+          if not (root / 'index.html').is_file():
+              raise SystemExit('Missing static dashboard entry point')
+          entries = list(root.rglob('*'))
+          if any(path.is_symlink() for path in entries):
+              raise SystemExit('Pages output contains a symbolic link')
+          size = sum(path.stat().st_size for path in entries if path.is_file())
+          if size > 900_000_000:
+              raise SystemExit(f'Pages output exceeds the 900 MB safety budget: {size} bytes')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f'Validated static site: {size:,} bytes\n')
+          print(f'Validated static site: {size:,} bytes')
+          PY
+
+      - name: Package anonymous state for the next refresh
+        run: python3 dashboard/scripts/package_pages_state.py --output "$TURNOUT_ARCHIVE"
+
+      - name: Save anonymous aggregate cache
+        uses: actions/cache/save@v6
+        with:
+          path: .turnout-state/aggregate-state.tar.gz
+          key: turnout-aggregates-v1-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Upload retained aggregate state
+        uses: actions/upload-artifact@v7
+        with:
+          name: anonymous-aggregate-state
+          path: .turnout-state/aggregate-state.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+          include-hidden-files: true
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload static site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+          retention-days: 1
+
+  persist:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download anonymous aggregate state
+        uses: actions/download-artifact@v8
+        with:
+          name: anonymous-aggregate-state
+          path: .turnout-state
+
+      - name: Retain aggregate state beyond cache eviction
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view data-state --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create data-state --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Retained anonymous turnout aggregates' --notes 'Automatically maintained aggregate inputs for rebuilding the public dashboard. No voter records.' --latest=false
+          fi
+          gh release upload data-state "$TURNOUT_ARCHIVE" --repo "$GITHUB_REPOSITORY" --clobber
+
+  deploy:
+    needs: [build, persist]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy static dashboard
+        id: deployment
+        uses: actions/deploy-pages@v5
