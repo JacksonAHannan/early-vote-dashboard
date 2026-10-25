@@ -163,6 +163,11 @@ pub struct View {
 }
 
 fn edges(metric: &Metric) -> Result<Vec<f64>> {
+    if crate::places::is_metric(metric) {
+        return Ok((0..=crate::places::LABELS.len())
+            .map(|i| i as f64)
+            .collect());
+    }
     ensure!(
         metric.unit == "percent",
         "unsupported demographic metric unit"
@@ -187,13 +192,13 @@ fn edges(metric: &Metric) -> Result<Vec<f64>> {
         .collect())
 }
 
-enum Exclusion {
+pub(crate) enum Exclusion {
     Missing,
     Invalid,
     ZeroDenominator,
 }
 
-fn group_counts(
+pub(crate) fn group_counts(
     county: Option<&CountyData>,
     members: &[String],
     metric: &Metric,
@@ -230,7 +235,7 @@ fn group_counts(
     if !numerator.is_finite() || !denominator.is_finite() {
         return Err(Exclusion::Invalid);
     }
-    if denominator == 0.0 {
+    if denominator == 0.0 && !crate::places::is_metric(metric) {
         return Err(Exclusion::ZeroDenominator);
     }
     // Only expose additional count fields when every member has a valid value.
@@ -287,7 +292,11 @@ pub fn analyze(
     let mut bins: Vec<_> = edges
         .windows(2)
         .map(|w| Bin {
-            label: format!("{}–{}%", w[0], w[1]),
+            label: if crate::places::is_metric(metric) {
+                crate::places::LABELS[w[0] as usize].into()
+            } else {
+                format!("{}–{}%", w[0], w[1])
+            },
             lo: w[0],
             hi: w[1],
             groups: 0,
@@ -332,8 +341,21 @@ pub fn analyze(
                         continue;
                     }
                 };
-            let x = counts[&metric.numerator] / counts[&metric.denominator] * 100.0;
-            let bucket = bins.iter().position(|b| x < b.hi).unwrap_or(bins.len() - 1);
+            let (x, bucket) = if crate::places::is_metric(metric) {
+                let Some(index) = crate::places::classify(&counts) else {
+                    coverage
+                        .invalid_demographics
+                        .add(group.votes_2024, group.votes_2026);
+                    continue;
+                };
+                (index as f64, index)
+            } else {
+                let x = counts[&metric.numerator] / counts[&metric.denominator] * 100.0;
+                (
+                    x,
+                    bins.iter().position(|b| x < b.hi).unwrap_or(bins.len() - 1),
+                )
+            };
             let bin = &mut bins[bucket];
             bin.groups += 1;
             bin.votes_2024 += group.votes_2024;
@@ -390,7 +412,11 @@ pub fn analyze(
         cohort: cohort.into(),
         metric: metric.clone(),
         n: xy.len(),
-        fit: regression::fit(&xy),
+        fit: if crate::places::is_metric(metric) {
+            None
+        } else {
+            regression::fit(&xy)
+        },
         points,
         bins,
         partisan_matrix,

@@ -58,3 +58,13 @@ a.download[aria-disabled="true"]{opacity:.45;pointer-events:none}
 .hover-census-heading{display:flex;justify-content:space-between;gap:14px;margin:9px 0 7px;font-size:11px;font-weight:500}.hover-census-heading b{font-weight:500}.hover-primary{margin:8px 0 0;padding-top:7px;border-top:1px solid var(--rule)}.hover-primary>div{display:flex;justify-content:space-between;gap:14px;font-size:10px}.hover-primary dt{color:var(--muted)}.hover-primary dd{margin:0}.hover-dates{overflow-wrap:anywhere}@media(max-height:520px){.precinct-hover{padding:9px 12px}.hover-heading{margin-bottom:6px}.hover-heading strong{font-size:14px}.hover-turnout{margin-bottom:7px}.hover-turnout strong{font-size:19px}.hover-party{padding:6px 0;margin-bottom:5px}.hover-census>div{margin:3px 0}.hover-census-heading{margin:6px 0 4px}.hover-dates{margin-top:7px;padding-top:5px}}
 
 .hover-current-metric{margin:4px 0}.hover-current-metric>div{display:flex;justify-content:space-between;gap:14px;font-size:11px}.hover-current-metric dt{color:var(--muted)}.hover-current-metric dd{margin:0}
+
+/* Shared analytical scope precedes the linked map and regression. */
+.explore-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:20px 0 12px}.explore-heading h2{font-size:20px;margin:0}.map-unavailable{color:#667085}.map-state-tooltip strong{font-size:14px}.map-state-tooltip span{display:block;margin-top:4px}
+@media(max-width:700px){.explore-heading{gap:6px}.explore-heading .scope-label{line-height:1.5}}
+
+.place-key{display:flex;flex-wrap:wrap;gap:7px 14px}.place-key span{display:inline-flex;align-items:center;gap:5px}.place-key i{display:inline-block;width:10px;height:10px;border-radius:2px}.selectors .view-switch,.workspace-filters .view-switch{flex-wrap:wrap}#regression-place{max-width:165px}
+
+.data-note{font-size:12px;color:#667085;line-height:1.5;margin:12px 0 0}.regression-actions{flex-wrap:wrap}
+
+.regression-key{padding:0 0 12px;font-size:11px;line-height:1.5}.regression-key span{white-space:nowrap}

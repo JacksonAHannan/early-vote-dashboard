@@ -20,13 +20,16 @@ with sync_playwright() as p:
  snapshot=page.request.get(BASE+'/api/data').json();census=page.request.get(BASE+'/api/demographics').json()
  counts={c['id']:len(census['counties'][c['id']]['precincts']) for c in snapshot['counties']}
  records={c['id']:c for c in snapshot['counties']}
- page.wait_for_function('(n)=>Atlas.layer && Atlas.layers.size===n',arg=counts['travis'])
- assert set(page.locator('#map-county option').evaluate_all('(options)=>options.map(o=>o.value)'))==set(counts)
+ page.wait_for_function('(n)=>Atlas.layer && Atlas.layers.size===n',arg=254)
+ assert set(page.locator('#map-county option').evaluate_all('(options)=>options.map(o=>o.value)'))==set(counts)|{'all'}
  for county,n in counts.items():
   page.locator('#map-county').select_option(county)
   page.wait_for_function('(v)=>Atlas.county===v[0]&&Atlas.layers.size===v[1]',arg=[county,n])
   expect(page.locator('#county-map path[data-precinct]')).to_have_count(n)
+  assert page.locator('#county').input_value()==county
+  assert page.locator('.regression-point').evaluate_all('(els,id)=>els.every(e=>e.dataset.county===id)',county)
   assert page.evaluate('Atlas.map.getBounds().contains(Atlas.layer.getBounds())')
+ page.locator('#map-county').select_option('all');page.wait_for_function('Atlas.county==="all"&&Atlas.layers.size===254')
  # Cross-county point selection, with all member geometries selected and visible.
  travis=next(c for c in snapshot['counties'] if c['id']=='travis')['periods'][-1]
  index=next(i for i,g in enumerate(travis['groups']) if g['bucket'] is not None and len(g['new'])>1 and g['votes_2024']>0)

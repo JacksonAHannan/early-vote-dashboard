@@ -311,6 +311,7 @@ async fn trend_view(State(app): State<App>, Query(query): Query<TrendsQuery>) ->
         let classification: Option<demographics::Data> =
             match query.view.as_deref().unwrap_or("partisan") {
                 "partisan" => None,
+                "place" => Some(places::load(&app.root)?),
                 "demographic" => Some(serde_json::from_slice(&std::fs::read(
                     app.root.join("data/demographics.json"),
                 )?)?),
@@ -369,6 +370,20 @@ async fn primary_data(State(app): State<App>) -> impl IntoResponse {
         ),
     }
 }
+async fn place_data(State(app): State<App>) -> impl IntoResponse {
+    match std::fs::read(places::path(&app.root)) {
+        Ok(bytes) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "application/json")],
+            bytes,
+        ),
+        Err(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            [(header::CONTENT_TYPE, "application/json")],
+            br#"{"error":"Place reference unavailable"}"#.to_vec(),
+        ),
+    }
+}
 async fn reference_data(State(app): State<App>) -> impl IntoResponse {
     aggregate_file(app, "reference.json").await
 }
@@ -408,8 +423,11 @@ async fn county_bucket_view(
 ) -> impl IntoResponse {
     let result = (|| -> Result<serde_json::Value> {
         let statewide = qualified_statewide(&app, query.method.as_deref().unwrap_or("total"))?;
-        let reference: county_buckets::Reference =
+        let mut reference: county_buckets::Reference =
             serde_json::from_slice(&std::fs::read(app.root.join("data/county-reference.json"))?)?;
+        if query.view.as_deref() == Some("place") {
+            places::county_reference(&mut reference, &places::load(&app.root)?)?;
+        }
         Ok(serde_json::to_value(county_buckets::analyze(
             &statewide,
             &reference,
@@ -461,9 +479,12 @@ async fn demographic_view(
         let file = match query.view.as_deref().unwrap_or("demographic") {
             "demographic" => "demographics.json",
             "primary" => "primary.json",
+            "place" => "places",
             _ => anyhow::bail!("Unknown classification view"),
         };
-        let path = if file == "primary.json" {
+        let path = if file == "places" {
+            places::path(&app.root)
+        } else if file == "primary.json" {
             demographics::primary_path(&app.root)
         } else {
             app.root.join("data").join(file)
@@ -508,14 +529,19 @@ async fn county_map(
         .counties
         .iter()
         .any(|c| c.id == county);
-    if !valid {
+    if !valid && county != "texas" {
         return (
             StatusCode::NOT_FOUND,
             [(header::CONTENT_TYPE, "application/json")],
             br#"{"error":"Unknown county"}"#.to_vec(),
         );
     }
-    match std::fs::read(app.root.join(format!("data/maps/{county}.geojson"))) {
+    let map_path = if county == "texas" {
+        app.root.join("geography/texas-counties.geojson")
+    } else {
+        app.root.join(format!("data/maps/{county}.geojson"))
+    };
+    match std::fs::read(map_path) {
         Ok(bytes) => (
             StatusCode::OK,
             [(header::CONTENT_TYPE, "application/geo+json")],
@@ -916,6 +942,7 @@ async fn main() -> Result<()> {
         .route("/api/statewide", get(statewide_data))
         .route("/api/completeness", get(completion_data))
         .route("/api/reference", get(reference_data))
+        .route("/api/places", get(place_data))
         .route("/api/demographics", get(demographic_data))
         .route("/api/demographic-view", get(demographic_view))
         .route("/api/map/{county}", get(county_map))

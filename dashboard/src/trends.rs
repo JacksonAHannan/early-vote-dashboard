@@ -171,6 +171,24 @@ fn classification(data: Option<&Data>, metric: &str) -> Result<(String, Vec<Buck
             .iter()
             .find(|m| m.id == metric)
             .context("unknown classification metric")?;
+        if crate::places::is_metric(m) {
+            return Ok((
+                m.label.clone(),
+                crate::places::LABELS
+                    .iter()
+                    .enumerate()
+                    .map(|(i, label)| Bucket {
+                        id: i.to_string(),
+                        label: (*label).into(),
+                        lo: None,
+                        hi: None,
+                        groups: 0,
+                        cumulative_groups: 0,
+                        days: empty_days(),
+                    })
+                    .collect(),
+            ));
+        }
         ensure!(m.unit == "percent", "unsupported classification unit");
         ensure!(
             m.cuts
@@ -235,6 +253,10 @@ fn group_bucket(
     };
     let m = data.metrics.iter().find(|m| m.id == metric)?;
     let county = data.counties.get(county)?;
+    if crate::places::is_metric(m) {
+        let counts = crate::demographics::group_counts(Some(county), &group.new, m).ok()?;
+        return crate::places::classify(&counts);
+    }
     if group.new.is_empty() {
         return None;
     }

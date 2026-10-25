@@ -170,6 +170,23 @@ fn classification<'a>(
                     .collect(),
             ))
         }
+        "place" => {
+            ensure!(metric == crate::places::METRIC, "unknown place metric");
+            let m = reference
+                .metrics
+                .iter()
+                .find(|m| crate::places::is_metric(m))
+                .context("missing place reference")?;
+            Ok((
+                m.label.clone(),
+                Some(m),
+                crate::places::LABELS
+                    .iter()
+                    .enumerate()
+                    .map(|(i, label)| empty_bucket(i.to_string(), (*label).into(), None, None))
+                    .collect(),
+            ))
+        }
         "demographic" => {
             let m = reference
                 .metrics
@@ -216,6 +233,16 @@ fn county_classification(
 ) -> std::result::Result<(usize, f64), &'static str> {
     let reference = reference.ok_or("missing county classification")?;
     if let Some(metric) = metric {
+        if crate::places::is_metric(metric) {
+            let counts = reference
+                .counts
+                .iter()
+                .filter_map(|(k, v)| v.map(|v| (k.clone(), v)))
+                .collect();
+            let bucket =
+                crate::places::classify(&counts).ok_or("missing or invalid place counts")?;
+            return Ok((bucket, bucket as f64));
+        }
         let numerator = reference
             .counts
             .get(&metric.numerator)

@@ -6,6 +6,7 @@ pub mod fort_bend;
 pub mod interstate;
 pub mod matching;
 pub mod pages;
+pub mod places;
 pub mod quality;
 pub mod rebuild;
 pub mod regression;

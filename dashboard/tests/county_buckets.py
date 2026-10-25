@@ -82,21 +82,17 @@ def audit_reference(reference, statewide):
     assert reference["sources"], "County classifiers require provenance"
 
 
-def expected_ids(statewide, reference, metric, measure, observed):
+def expected_ids(statewide, reference, metric, measure, selected_day, observed):
     classified = {
         c["id"]: classification(reference["counties"].get(c["id"], {}), metric)
         for c in statewide["counties"]
     }
     prefix = "votes" if measure == "daily" else "cumulative"
     included = [
-        c["id"]
-        for c in statewide["counties"]
+        c["id"] for c in statewide["counties"]
         if classified[c["id"]] is not None
-        and all(
-            day[f"{prefix}_{year}"] is not None
-            for day in c["days"][:observed]
-            for year in (2024, 2026)
-        )
+        and c["days"][selected_day-1][f"{prefix}_2024"] is not None
+        and (selected_day > observed or c["days"][selected_day-1][f"{prefix}_2026"] is not None)
     ]
     return classified, included
 
@@ -127,9 +123,11 @@ def api_audit(reference, statewide):
     metrics = [("partisan", None)] + [("demographic", m) for m in reference["metrics"]]
     for kind, metric in metrics:
         metric_id = "presidential_margin" if metric is None else metric["id"]
-        classified, daily_ids = expected_ids(statewide, reference, metric, "daily", observed)
-        _, cumulative_ids = expected_ids(statewide, reference, metric, "cumulative", observed)
+        classified, _ = expected_ids(statewide, reference, metric, "daily", 1, observed)
+        membership = {n:{m:expected_ids(statewide, reference, metric, m, n, observed)[1] for m in ("daily","cumulative")} for n in range(1,13)}
         for selected_day in range(1, observed + 1):
+            daily_ids=membership[selected_day]["daily"]
+            cumulative_ids=membership[selected_day]["cumulative"]
             query = urlencode({"view": kind, "metric": metric_id, "day": selected_day})
             view = get("/api/county-buckets?" + query)
             context = (kind, metric_id, selected_day)
@@ -164,7 +162,10 @@ def api_audit(reference, statewide):
                         stamp = date(year, 10, start_day) + timedelta(days=day_index)
                         assert row[f"date_{year}"] == stamp.isoformat()
                         for measure in ("daily", "cumulative"):
-                            expected = expected_value(native, members[measure], day_index, year, measure, observed)
+                            point_members=[id for id in membership[day_index+1][measure] if target is None or classified[id]==target]
+                            field="county_ids" if measure=="daily" else "cumulative_county_ids"
+                            assert row[field]==point_members,(context,index,day_index+1,measure,"date-specific membership")
+                            expected = expected_value(native, point_members, day_index, year, measure, observed)
                             actual = row[f"{measure}_{year}"]
                             assert actual == expected, (context, index, day_index + 1, year, measure, actual, expected)
                             cells += 1
@@ -279,8 +280,10 @@ def browser_audit(reference):
         expect(page.locator("#statewide-county-title")).to_contain_text("Harris")
         expect(page.locator("#statewide-precincts")).to_be_visible()
         expect(page.locator('#statewide-chart .timeline-dot[data-year="2024"]')).to_have_count(12)
-        page.locator("#statewide-search").fill("Johnson")
-        page.locator('[data-state-county="johnson"]').click()
+        county_only=page.evaluate('Tracking.state.counties.find(c=>!data.counties.some(p=>p.id===c.id))')
+        assert county_only, "County-only detail fixture"
+        page.locator("#statewide-search").fill(county_only["name"])
+        page.locator(f'[data-state-county="{county_only["id"]}"]').click()
         expect(page.locator("#statewide-precincts")).to_be_hidden()
         page.locator("#statewide-search").fill("Travis")
         page.locator('[data-state-county="travis"]').click()
@@ -320,9 +323,11 @@ def browser_audit(reference):
             assert row["geography"] == "county"
             assert row["view"] == "demographic" and row["metric"] == "non_white_vap"
             bucket = exported_buckets[row["bucket"]]
-            assert int(row["daily_counties"]) == bucket["groups"]
-            assert int(row["cumulative_counties"]) == bucket["cumulative_groups"]
             expected = bucket["days"][int(row["day"]) - 1]
+            assert int(row["daily_counties"]) == expected["groups"]
+            assert int(row["cumulative_counties"]) == expected["cumulative_groups"]
+            assert row["daily_county_ids"].split(";") == expected["county_ids"] or not row["daily_county_ids"] and not expected["county_ids"]
+            assert row["cumulative_county_ids"].split(";") == expected["cumulative_county_ids"] or not row["cumulative_county_ids"] and not expected["cumulative_county_ids"]
             for key in ("daily_2024", "daily_2026", "cumulative_2024", "cumulative_2026"):
                 assert row[key] == ("" if expected[key] is None else str(expected[key]))
         page.screenshot(path=str(OUT / "counties-demographic-desktop.png"), full_page=True)
@@ -342,7 +347,7 @@ def browser_audit(reference):
             if key == "county-summary":
                 text = subprocess.run(["tesseract", str(path), "stdout"], capture_output=True, text=True, check=True).stdout.replace(",", "")
                 for item in exported_view["buckets"]:
-                    cutoff = item["days"][observed - 1]
+                    cutoff = item["days"][exported_view["day"] - 1]
                     for field in ("cumulative_2024", "cumulative_2026"):
                         if cutoff[field] is not None:
                             assert str(cutoff[field]) in text, ("clipped summary value", item["label"], field, cutoff[field], text)
@@ -381,9 +386,9 @@ def browser_audit(reference):
             "county and precinct workspace navigation with independent filters",
             "precinct Trends and Explore retain linked regression/map selection",
             "county bucket filters table and exact daily/cumulative aggregate timeline",
-            "Johnson county-only detail and Harris/Travis precinct shortcuts",
+            "data-derived county-only detail and Harris/Travis precinct shortcuts",
             "six demographic choices including total non-white",
-            "fixed cumulative cohort count and future 2026 gaps",
+            "date-specific cumulative cohort count and future 2026 gaps",
             "72 exported CSV rows match rendered engine values",
             "ten PNG downloads have 1600 by 1000 opaque colored data",
             "keyboard collapse state survives workspace navigation",
@@ -406,7 +411,7 @@ def main():
     report["checks"] = [
         "all 254 county identities, FIPS and Census complements",
         "six partisan and six demographic metric classifications from native counts",
-        "independent fixed daily and cumulative reporting cohorts",
+        "independent maximum daily and cumulative reporting cohorts at each date",
         "all twelve aligned calendar days and future 2026 nulls",
         "official cumulative totals kept separate from native daily counts",
         "all selected-day county records retained outside analytical cohorts",

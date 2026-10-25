@@ -49,7 +49,7 @@ def run():
    expect(card.locator('.hover-heading strong')).to_have_text('Precinct '+pid)
    expect(card.locator('.hover-heading span')).to_have_text(c['name']+' County')
    expect(card.locator('.hover-turnout strong').nth(0)).to_have_text(f'{native_count(c,day,pid):,}')
-   expect(card.locator('.hover-turnout span').nth(1)).to_have_text('Group vs. 2024')
+   expect(card.locator('.hover-turnout span').nth(1)).to_have_text('Group cumulative vs. 2024')
    expect(card.locator('.hover-turnout strong').nth(1)).to_have_text(f"{g['votes_2026']/g['votes_2024']*100:.1f}%")
    expect(card.locator('.hover-comparison b')).to_have_text(f"{g['votes_2026']:,} / {g['votes_2024']:,}")
    expect(card.locator('.hover-geography')).to_contain_text(f"{len(g['new'])} current / {len(g['old'])} historical")

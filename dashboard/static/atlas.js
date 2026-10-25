@@ -1,20 +1,20 @@
 'use strict';
 const Atlas=window.Atlas={
- map:null,layer:null,cache:new Map(),layers:new Map(),county:'travis',active:null,native:null,ctx:null,request:0,initialized:false,
+ map:null,layer:null,cache:new Map(),layers:new Map(),county:'all',active:null,native:null,ctx:null,request:0,initialized:false,
  init(ctx){
-  this.ctx=ctx;
+  this.ctx=ctx;this.county=ctx.focusCounty||'all';
   if(this.initialized)return;
   this.initialized=true;
   this.map=L.map('county-map',{zoomControl:false,attributionControl:true,scrollWheelZoom:false,trackResize:false,zoomSnap:.25,minZoom:4,maxZoom:19,preferCanvas:false});
   L.control.zoom({position:'bottomright'}).addTo(this.map);
-  this.map.attributionControl.setPrefix(false);this.map.attributionControl.addAttribution('Texas Legislative Council');
-  this.map.setView([30.3,-97.75],9);
-  $('map-county').innerHTML=ctx.data.counties.map(c=>`<option value="${c.id}">${esc(c.name)} County</option>`).join('');
+  this.map.attributionControl.setPrefix(false);
+  this.map.setView([31.1,-99.2],5);
+  $('map-county').innerHTML='<option value="all">All Texas</option>'+ctx.data.counties.map(c=>`<option value="${c.id}">${esc(c.name)} County</option>`).join('');
   $('map-county').value=this.county;
-  $('map-county').onchange=e=>{this.active=null;this.native=null;this.ctx.onCounty(e.target.value);this.showCounty(e.target.value,true);};
+  $('map-county').onchange=e=>{this.active=null;this.native=null;this.ctx.onCounty(e.target.value);};
   $('map-layer').onchange=()=>{this.hideTooltip();this.repaint();this.legend();};
   $('map-reset').onclick=()=>this.reset();
-  $('selection-clear').onclick=()=>this.reset();
+  $('selection-clear').onclick=()=>this.clearSelection();
   this.map.on('zoomend',()=>this.markSelection());
   this.map.on('movestart',()=>this.hideTooltip());
   window.addEventListener('scroll',()=>this.hideTooltip(),{passive:true,capture:true});
@@ -27,7 +27,7 @@ const Atlas=window.Atlas={
   this.showCounty(this.county,true);
  },
  visible(){const node=$('county-map');return node.clientWidth>80&&node.clientHeight>80;},
- update(ctx){this.hideTooltip();this.ctx=ctx;if(!this.initialized){this.init(ctx);return;}this.repaint();this.legend();this.profile();},
+ update(ctx){this.hideTooltip();this.ctx=ctx;if(!this.initialized){this.init(ctx);return;}if(this.county!==ctx.focusCounty){this.showCounty(ctx.focusCounty,true);this.profile();return;}if(this.county==='all'&&this.layer){const waiting=ctx.mode!=='partisan'&&!demoReady();$('map-loading').hidden=!waiting;if(waiting)$('map-loading').textContent='Loading comparison…';}this.repaint();this.legend();this.profile();},
  countyRecord(id=this.county){return this.ctx.data.counties.find(c=>c.id===id);},
  period(id=this.county){const p=this.countyRecord(id)?.periods.find(p=>p.day===this.ctx.day);return p?.coverage?.available_groups===0?undefined:p;},
  group(id,index){return this.period(id)?.groups[index];},
@@ -51,6 +51,7 @@ const Atlas=window.Atlas={
  mix(a,b,t){t=Math.max(0,Math.min(1,t));const aa=a.match(/\w\w/g).map(v=>parseInt(v,16)),bb=b.match(/\w\w/g).map(v=>parseInt(v,16));return '#'+aa.map((v,i)=>Math.round(v+(bb[i]-v)*t).toString(16).padStart(2,'0')).join('');},
  color(value){
   if(value===null||!Number.isFinite(value))return '#dfe5ec';
+  if(this.ctx.mode==='place'&&$('map-layer').value!=='turnout')return placeColors[value]||'#dfe5ec';
   if($('map-layer').value==='turnout')return value<100?this.mix('a77b35','f4f5f7',(value-50)/50):this.mix('f4f5f7','176b83',(value-100)/50);
   if(this.ctx.mode==='demographic')return this.mix('edf5f3','087383',value/100);
   return value<50?this.mix('b5463d','f4f3f4',value/50):this.mix('f4f3f4','2266a7',(value-50)/50);
@@ -58,6 +59,7 @@ const Atlas=window.Atlas={
  eligible(g){return g&&g.available!==false&&(this.ctx.cohort==='unchanged'?g.unchanged:(this.ctx.mode!=='partisan'||g.bucket!==null));},
  featureValue(feature){
   const p=feature.properties,g=this.group(p.county,p.group);
+  if(this.ctx.mode==='place'&&$('map-layer').value==='share')return this.ctx.bins.get(`${p.county}:${p.group}`)??null;
   if(this.ctx.mode!=='partisan'&&$('map-layer').value==='share'&&this.ctx.cohort==='matched')return this.metricValue(this.classificationCounts(p.county,p.precinct));
   if(!this.eligible(g))return null;
   if($('map-layer').value==='turnout')return g.votes_2024>0?100*g.votes_2026/g.votes_2024:null;
@@ -65,6 +67,7 @@ const Atlas=window.Atlas={
   return g.harris+g.trump>0?100*g.harris/(g.harris+g.trump):null;
  },
  style(feature){
+  if(this.county==='all')return {color:'#fff',weight:.8,opacity:1,fillColor:this.color(this.overviewValue(feature.properties.county)),fillOpacity:.9};
   const p=feature.properties,isSelected=this.active?.county===p.county&&this.active.group_index===p.group;
   const isNative=isSelected&&this.native===p.precinct;
   return {color:isNative?'#4c269b':isSelected?'#713bc2':'#ffffff',weight:isNative?3:isSelected?2.3:.65,opacity:1,fillColor:this.color(this.featureValue(feature)),fillOpacity:isSelected?.95:this.ctx.bucket!==null&&(this.ctx.focusCounty!==p.county||this.ctx.bins.get(`${p.county}:${p.group}`)!==this.ctx.bucket)?.2:.85};
@@ -81,7 +84,7 @@ const Atlas=window.Atlas={
   const primaryMetric=primary?.metrics[0],primaryCounts=primary?.counties?.[p.county]?.precincts?.[p.precinct]?.counts,primaryShare=primaryMetric&&primaryCounts&&Number.isFinite(primaryCounts[primaryMetric.numerator])&&primaryCounts[primaryMetric.numerator]>=0&&primaryCounts[primaryMetric.numerator]<=primaryCounts[primaryMetric.denominator]&&primaryCounts[primaryMetric.denominator]>0?primaryCounts[primaryMetric.numerator]/primaryCounts[primaryMetric.denominator]:null;
   const extraMetric=this.ctx.mode==='demographic'&&this.ctx.metric?.denominator!=='vap'?this.ctx.metric:null,extraN=extraMetric?counts?.[extraMetric.numerator]:null,extraD=extraMetric?counts?.[extraMetric.denominator]:null,extraShare=Number.isFinite(extraN)&&extraN>=0&&extraN<=extraD&&extraD>0?extraN/extraD:null;
   const band=candidate?.bucket!==null&&candidate?.bucket!==undefined?this.period(p.county)?.buckets[candidate.bucket]?.label:null;
-  return `<div class="hover-heading"><strong>Precinct ${esc(p.precinct)}</strong><span>${esc(county?.name||p.county)} County</span></div><div class="hover-turnout"><div><span>2026 in person</span><strong>${native===null?'—':number(native)}</strong></div><div><span>${multiple?'Group':'Matched'} vs. 2024</span><strong>${percent(pairRatio)}</strong></div></div><div class="hover-comparison"><span>${multiple?'Group':'Matched'} votes · 2026 / 2024</span><b>${paired?number(paired.votes_2026)+' / '+number(paired.votes_2024):'Unavailable'}</b></div>${geometry&&(geometry.new.length>1||geometry.old.join(';')!==geometry.new.join(';'))?`<div class="hover-geography">Comparison group · ${geometry.new.length} current / ${geometry.old.length} historical precincts</div>`:''}<div class="hover-party"><span>${esc(band?(multiple?'2024 group · ':'2024 · ')+band:'2024 comparison group')}</span><b>${share===null?'Unknown':`Harris ${percent(share)} · Trump ${percent(1-share)}`}</b></div><dl class="hover-census">${detail('2020 residents',counts?.population===null||counts?.population===undefined?'—':number(counts.population))}</dl>${extraMetric?`<dl class="hover-current-metric">${detail(extraMetric.label,percent(extraShare))}</dl>`:''}<div class="hover-census-heading"><span>Residents age 18+</span><b>${counts?.vap===null||counts?.vap===undefined?'—':number(counts.vap)}</b></div><dl class="hover-census">${race('Total non-white','non_white_vap')}${race('Hispanic','hispanic_vap')}${race('White non-Hispanic','white_nh_vap')}${race('Black','black_vap')}${race('Asian','asian_vap')}</dl>${primaryShare===null&&this.ctx.mode!=='primary'?'':`<dl class="hover-primary">${detail('2026 Democratic primary',percent(primaryShare))}</dl>`}<div class="hover-dates">${esc(dates(comparisonPeriod(this.ctx.day)))}</div>`;
+  return `<div class="hover-heading"><strong>Precinct ${esc(p.precinct)}</strong><span>${esc(county?.name||p.county)} County</span></div><div class="hover-turnout"><div><span>2026 cumulative in person</span><strong>${native===null?'—':number(native)}</strong></div><div><span>${multiple?'Group':'Matched'} cumulative vs. 2024</span><strong>${percent(pairRatio)}</strong></div></div><div class="hover-comparison"><span>${multiple?'Group':'Matched'} votes · 2026 / 2024</span><b>${paired?number(paired.votes_2026)+' / '+number(paired.votes_2024):'Unavailable'}</b></div>${geometry&&(geometry.new.length>1||geometry.old.join(';')!==geometry.new.join(';'))?`<div class="hover-geography">Comparison group · ${geometry.new.length} current / ${geometry.old.length} historical precincts</div>`:''}<div class="hover-party"><span>${esc(band?(multiple?'2024 group · ':'2024 · ')+band:'2024 comparison group')}</span><b>${share===null?'Unknown':`Harris ${percent(share)} · Trump ${percent(1-share)}`}</b></div>${this.ctx.mode==='place'?`<div class="hover-party"><span>Comparison-group place type</span><b>${esc(placeLabels[this.ctx.bins.get(`${p.county}:${p.group}`)]||'Unavailable')}</b></div>`:''}<dl class="hover-census">${detail('2020 residents',counts?.population===null||counts?.population===undefined?'—':number(counts.population))}</dl>${extraMetric?`<dl class="hover-current-metric">${detail(extraMetric.label,percent(extraShare))}</dl>`:''}<div class="hover-census-heading"><span>Residents age 18+</span><b>${counts?.vap===null||counts?.vap===undefined?'—':number(counts.vap)}</b></div><dl class="hover-census">${race('Total non-white','non_white_vap')}${race('Hispanic','hispanic_vap')}${race('White non-Hispanic','white_nh_vap')}${race('Black','black_vap')}${race('Asian','asian_vap')}</dl>${primaryShare===null&&this.ctx.mode!=='primary'?'':`<dl class="hover-primary">${detail('2026 Democratic primary',percent(primaryShare))}</dl>`}<div class="hover-dates">${esc(dates(comparisonPeriod(this.ctx.day)))}</div>`;
  },
  showTooltip(feature,event,layer){
   if(this.touchInput||!this.visible()||!$('map-loading').hidden||feature.properties.county!==this.county||event?.originalEvent?.buttons||event?.originalEvent?.sourceCapabilities?.firesTouchEvents)return;
@@ -100,7 +103,44 @@ const Atlas=window.Atlas={
  },
  hideTooltip(){if(this.tooltipNode)this.tooltipNode.hidden=true;},
 
+ overviewValue(id){
+  const groups=this.ctx.rows.get(id)||[];if(!groups.length)return null;
+  if($('map-layer').value==='turnout'){const old=groups.reduce((n,g)=>n+g.votes_2024,0);return old>0?100*groups.reduce((n,g)=>n+g.votes_2026,0)/old:null;}
+  if(this.ctx.mode==='partisan'){const h=groups.reduce((n,g)=>n+g.harris,0),t=groups.reduce((n,g)=>n+g.trump,0);return h+t>0?100*h/(h+t):null;}
+  const ids=new Set(groups.flatMap(g=>g.new)),counts={};for(const id2 of ids){const c=this.classificationCounts(id,id2);if(!c)return null;for(const [key,value]of Object.entries(c))if(Number.isFinite(value))counts[key]=(counts[key]||0)+value;}
+  return this.ctx.mode==='place'?placeIndex(counts):this.metricValue(counts);
+ },
+ overviewTooltip(feature){
+  if(this.ctx.mode!=='partisan'&&!demoReady())return `<strong>${esc(feature.properties.name)} County</strong><br>Loading comparison…`;
+  const id=feature.properties.county,groups=this.ctx.rows.get(id)||[],old=groups.reduce((n,g)=>n+g.votes_2024,0),current=groups.reduce((n,g)=>n+g.votes_2026,0),p=this.period(id),cov=p?.coverage;
+  return `<div class="map-state-tooltip"><strong>${esc(feature.properties.name)} County</strong><span>${number(groups.length)} matched precinct groups</span>${groups.length?`<span>Cumulative 2026 / 2024: ${number(current)} / ${number(old)}</span><span>${percent(old>0?current/old:null)} of 2024</span>`:'<span>No comparable precinct data for this selection</span>'}${!this.ctx.data.counties.some(c=>c.id===id)?'<span>Open county totals</span>':''}${cov?`<span>${number(cov.available_precincts)} / ${number(cov.total_precincts)} precincts paired</span>`:''}<span>${esc(dates(comparisonPeriod(this.ctx.day)))}</span></div>`;
+ },
+ attribution(source){
+  if(this.geographyAttribution===source)return;
+  if(this.geographyAttribution)this.map.attributionControl.removeAttribution(this.geographyAttribution);
+  this.map.attributionControl.addAttribution(source);this.geographyAttribution=source;
+ },
+ async showTexas(fit=true){
+  this.attribution('U.S. Census Bureau');
+  this.hideTooltip();this.county='all';$('map-county').value='all';const token=++this.request;
+  this.layer?.remove();this.layer=null;this.layers.clear();$('map-loading').hidden=false;$('map-loading').textContent='Loading Texas…';
+  try{
+   let geo=this.cache.get('all');if(!geo){const response=await fetch('/api/map/texas');if(!response.ok)throw Error('Texas county map unavailable');geo=await response.json();this.cache.set('all',geo);}
+   if(token!==this.request)return;
+   this.layer=L.geoJSON(geo,{style:f=>this.style(f),onEachFeature:(feature,layer)=>{
+    const id=feature.properties.county;this.layers.set(id,layer);layer.bindTooltip(()=>this.overviewTooltip(feature),{sticky:true});
+    const available=this.ctx.data.counties.some(c=>c.id===id);
+    layer.on('click',()=>{if(available)this.ctx.onCounty(id);else this.ctx.onCountyTotals(id);});
+    layer.on('mouseover',()=>{this.hover(id,null);layer.setStyle({color:'#713bc2',weight:2});this.raise(layer);});layer.on('mouseout',()=>this.hover(null,null));
+   }}).addTo(this.map);
+   this.layer.eachLayer((layer)=>{const el=layer.getElement();if(!el)return;el.dataset.county=layer.feature.properties.county;el.setAttribute('role','button');el.setAttribute('tabindex',this.layers.values().next().value===layer?'0':'-1');el.setAttribute('aria-label',`${layer.feature.properties.name} County: ${this.ctx.rows.get(layer.feature.properties.county)?.length||0} matched precinct groups`);el.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();if(this.ctx.data.counties.some(c=>c.id===layer.feature.properties.county))this.ctx.onCounty(layer.feature.properties.county);else this.ctx.onCountyTotals(layer.feature.properties.county);}else if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();const rows=[...this.layers.values()],i=rows.indexOf(layer),next=rows[(i+(['ArrowLeft','ArrowUp'].includes(event.key)?-1:1)+rows.length)%rows.length];el.tabIndex=-1;next.getElement().tabIndex=0;next.getElement().focus();}};el.onfocus=()=>{this.hover(layer.feature.properties.county,null);layer.openTooltip();};el.onblur=()=>{layer.closeTooltip();this.hover(null,null);};});
+   const waiting=this.ctx.mode!=='partisan'&&!demoReady();$('map-loading').hidden=!waiting;if(waiting)$('map-loading').textContent='Loading comparison…';if(fit&&this.visible())this.map.fitBounds(this.layer.getBounds(),{padding:[16,16],animate:false});this.legend();this.profile();
+  }catch(error){if(token===this.request)$('map-loading').textContent=error.message;}
+ },
  async showCounty(id,fit=true){
+  if(id==='all')return this.showTexas(fit);
+  this.attribution('Texas Legislative Council');
+  this.layer?.remove();this.layer=null;this.layers.clear();
   this.hideTooltip();this.county=id;$('map-county').value=id;const token=++this.request;
   $('map-loading').hidden=false;$('map-loading').textContent='Loading precincts…';
   try{
@@ -151,19 +191,23 @@ const Atlas=window.Atlas={
  raise(layer){if(layer.getElement()!==document.activeElement)layer.bringToFront();},
  repaint(){if(this.layer){this.layer.eachLayer(layer=>{layer.setStyle(this.style(layer.feature));if(this.active?.group_index===layer.feature.properties.group)this.raise(layer);});}this.markSelection();},
  hover(id,index){
-  document.querySelectorAll('.regression-point').forEach(el=>el.classList.toggle('linked-hover',el.dataset.id===`${id}:${index}`));
+  document.querySelectorAll('.regression-point').forEach(el=>el.classList.toggle('linked-hover',this.county==='all'?id!==null&&el.dataset.county===id:el.dataset.id===`${id}:${index}`));
   if(!this.layer)return;
-  this.layer.eachLayer(layer=>{layer.setStyle(this.style(layer.feature));if(id===this.county&&layer.feature.properties.group===index){layer.setStyle({color:'#713bc2',weight:2});this.raise(layer);}});
+  this.layer.eachLayer(layer=>{layer.setStyle(this.style(layer.feature));if(this.county==='all'?layer.feature.properties.county===id:id===this.county&&layer.feature.properties.group===index){layer.setStyle({color:'#713bc2',weight:2});this.raise(layer);}});
  },
- reset(){this.hideTooltip();this.active=null;this.native=null;this.ctx.onClear();this.repaint();if(this.layer&&this.visible())this.map.fitBounds(this.layer.getBounds(),{padding:[24,24],animate:!matchMedia('(prefers-reduced-motion: reduce)').matches,duration:.4});this.profile();},
+ reset(){if(this.county!=='all'){this.ctx.onCounty('all');return;}this.clearSelection();},
+ clearSelection(){this.hideTooltip();this.active=null;this.native=null;this.ctx.onClear();this.repaint();if(this.layer&&this.visible())this.map.fitBounds(this.layer.getBounds(),{padding:[24,24],animate:!matchMedia('(prefers-reduced-motion: reduce)').matches,duration:.4});this.profile();},
  legend(){
+  $('map-reset').hidden=false;$('map-reset').textContent=this.county==='all'?'Reset zoom':'All Texas';
   const demo=this.ctx.mode!=='partisan',turnout=$('map-layer').value==='turnout';
+  if(this.ctx.mode==='place'&&!turnout){$('map-layer').options[0].textContent='Place type';$('map-legend').innerHTML='<div class="place-key">'+placeLabels.map((label,i)=>`<span><i style="background:${placeColors[i]}"></i>${esc(label)}</span>`).join('')+'<span><i style="background:#dfe5ec"></i>No comparison</span>'+`</div><span class="map-vintage">${this.county==='all'?'County overview · ':''}NCES 2025 · 2020 Census age 18+</span>`;return;}
   $('map-layer').options[0].textContent=demo?this.ctx.metric?.label||'Demographic share':'Harris share';
   const gradient=turnout?'#a77b35,#f4f5f7,#176b83':this.ctx.mode==='demographic'?'#edf5f3,#87babb,#087383':'#b5463d,#f4f3f4,#2266a7';
-  const label=turnout?'2026 / 2024 group votes':demo?`${this.ctx.metric?.label||'Residents'}${this.ctx.metric?.denominator==='vap'?' · age 18+':''}`:'2024 group Harris share';
-  $('map-legend').innerHTML=`<span>${esc(label)}</span><div class="scale"><div class="scale-bar" style="background:linear-gradient(90deg,${gradient})"></div><div class="scale-ticks"><span>${turnout?'50%':'0%'}</span><span>${turnout?'100%':'50%'}</span><span>${turnout?'150%+':'100%'}</span></div></div><span class="map-vintage">${demo&&!turnout?(this.ctx.mode==='primary'?(Object.keys(this.ctx.classification?.counties?.[this.county]?.precincts||{}).length?'2026 primary':'Primary unavailable'):'2020 Census'):'2026 precincts'}</span>`;
+  const label=turnout?'Cumulative 2026 as % of 2024':demo?`${this.ctx.metric?.label||'Residents'}${this.ctx.metric?.denominator==='vap'?' · age 18+':''}`:'2024 group Harris share';
+  $('map-legend').innerHTML=`<span>${esc(label)}</span><div class="scale"><div class="scale-bar" style="background:linear-gradient(90deg,${gradient})"></div><div class="scale-ticks"><span>${turnout?'50%':'0%'}</span><span>${turnout?'100%':'50%'}</span><span>${turnout?'150%+':'100%'}</span></div></div><span class="map-vintage">${demo&&!turnout?(this.ctx.mode==='primary'?(Object.keys(this.ctx.classification?.counties?.[this.county]?.precincts||{}).length?'2026 primary':'Primary unavailable'):'2020 Census'):(this.county==='all'?'County overview · gray: unavailable / unclassified':'2026 precincts · gray: unavailable / unclassified')}</span>`;
  },
  profile(){
+  $('selection-panel').hidden=this.county==='all';if(this.county==='all')return;
   const county=this.countyRecord(),period=this.period();if(!county)return;
   const active=this.active?.county===this.county?this.active:null,candidate=active?this.group(this.county,active.group_index):null,g=candidate?.available===false?null:candidate;
   const geometry=g||(active?referenceByCounty.get(this.county)?.groups[active.group_index]:null),precinct=this.native,ids=geometry?.new||[],isNative=precinct!==null;
@@ -177,7 +221,7 @@ const Atlas=window.Atlas={
   $('selection-clear').hidden=!(geometry||isNative);
   $('selection-panel').dataset.county=this.county;$('selection-panel').dataset.group=active?.group_index??'';$('selection-panel').dataset.precinct=precinct||'';
   const ratio=baseline>0&&Number.isFinite(current)?(g?g.votes_2026:current)/baseline:null;
-  const stats=[[current===null||current===undefined?'—':number(current),'2026 in-person'],[percent(ratio),geometry&&isNative&&geometry.new.length>1?'Group vs. 2024':'vs. 2024'],[complete&&h+t>0?percent(h/(h+t)):'—',geometry&&geometry.new.length>1?'2024 group Harris':'2024 Harris'],[counts?.population===null||counts?.population===undefined?'—':number(counts.population),'2020 residents'],[counts?.vap===null||counts?.vap===undefined?'—':number(counts.vap),'Residents age 18+']];
+  const stats=[[current===null||current===undefined?'—':number(current),'2026 cumulative in-person'],[percent(ratio),geometry&&isNative&&geometry.new.length>1?'Group vs. 2024':'vs. 2024'],[complete&&h+t>0?percent(h/(h+t)):'—',geometry&&geometry.new.length>1?'2024 group Harris':'2024 Harris'],[counts?.population===null||counts?.population===undefined?'—':number(counts.population),'2020 residents'],[counts?.vap===null||counts?.vap===undefined?'—':number(counts.vap),'Residents age 18+']];
   $('selection-stats').innerHTML=stats.map(([v,k])=>`<div><dd>${v}</dd><dt>${k}</dt></div>`).join('');
   const bars=[['Total non-white','non_white_vap','#137b8a'],['Hispanic','hispanic_vap','#7c5bb4'],['White non-Hispanic','white_nh_vap','#416d9b'],['Black','black_vap','#d28a39'],['Asian','asian_vap','#268c92']];
   $('demographic-profile').innerHTML=bars.map(([label,key,color])=>{const value=counts?.[key],denom=counts?.vap,p=value!==null&&value!==undefined&&denom>0?value/denom:null;return `<div class="demographic-bar"><span>${label}</span><div><i style="width:${p===null?0:100*p}%;background:${color}"></i></div><b>${percent(p)}</b></div>`;}).join('');

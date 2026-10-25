@@ -24,6 +24,9 @@ with sync_playwright() as p:
   if key in ['county-table','county-trend']:page.locator('#counties-tab').click()
   else:
    page.locator('#precincts-tab').click();page.locator('#precinct-trends-tab' if key.startswith('daily') or key=='matrix' else '#precinct-explore-tab').click()
+   if key.startswith('daily') or key=='matrix':page.locator('#county').select_option('all')
+   elif page.locator('#county').input_value()=='all':
+    page.locator('#county').select_option('travis');page.wait_for_function('Atlas.county==="travis"&&Atlas.layer&&document.getElementById("map-loading").hidden')
   page.wait_for_timeout(100)
  navigate('daily')
  current_day=page.evaluate('data.days');panels=page.locator('[data-collapsible]');expect(panels).to_have_count(9)
@@ -41,7 +44,7 @@ with sync_playwright() as p:
    assert page.locator('#precinct-explore [data-collapsible].is-collapsed').count()==4
    assert page.evaluate('document.documentElement.scrollHeight')<1200
   page.locator('[data-panel="map-panel"]' if individual else '[data-panels="expand"]').click();expect(page.locator('#map-panel-body')).to_be_visible();page.wait_for_timeout(200)
-  assert page.evaluate('(v)=>Math.abs(Atlas.map.getCenter().lat-v.lat)<1e-7&&Math.abs(Atlas.map.getCenter().lng-v.lng)<1e-7&&Atlas.map.getZoom()===v.zoom',camera)
+  assert page.evaluate('(v)=>{const a=Atlas.map.project(v,v.zoom),b=Atlas.map.project(Atlas.map.getCenter(),v.zoom);return Math.abs(a.x-b.x)<1&&Math.abs(a.y-b.y)<1&&Atlas.map.getZoom()===v.zoom;}',camera)
  # Every visible visual actually produces a valid PNG download.
  keys=page.locator('[data-image]').evaluate_all('(els)=>els.map(e=>e.dataset.image).filter(k=>!k.startsWith("county-daily")&&k!=="county-summary")')
  assert len(keys)==len(set(keys)) and len(keys)==17,keys

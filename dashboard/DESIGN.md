@@ -65,10 +65,41 @@ Rerun inputs: workflow `firecrawl-website-design-clone`; source URLs above; targ
 
 ## Analytical navigation
 
-The geographic level is the first choice: Counties (all 254 official aggregate reports) and Precincts (nine native precinct counties). Each workspace owns its classification filters. Counties supports 2024 presidential margin and the six 2020 Census compositions. Primary participation remains in Precincts where acquired party-specific counts support it. A shared completed-day row selects the comparison cutoff.
+The geographic level is the first choice: Counties (all 254 official aggregate reports) and Precincts (all available native precinct counties). Each workspace owns its classification filters. Counties supports 2024 presidential margin and the six 2020 Census compositions. Primary participation remains in Precincts where acquired party-specific counts support it. A shared completed-day row selects the comparison cutoff.
 
 County tracking leads with a two-by-three timeline grid, then selected-day cumulative comparisons and searchable county drilldown. Bucket selection filters county records and their aggregate trend. The daily and cumulative reporting cohorts have separate counts; native cumulative values remain independent of daily values. The compact comparison row becomes three columns across two rows in a social image so labels remain legible.
 
 Precinct Trends contains daily buckets and the cross-county matrix. Explore contains the linked map/regression, selected geographic profile, local bucket bars and precinct table. Clicking a matrix bucket opens Explore. A county with native precinct coverage offers a direct Precincts action from its county trend. Navigation preserves independent filters and panel collapse state; bulk folds act only on the visible workspace.
 
 Keep metric names in their selectors rather than repeating them in subtitles. Show the Census vintage once beside demographic controls, county coverage beside timelines, and detailed provenance in the source disclosure.
+
+
+## October 25 visualization review
+
+The analytical sequence is geography → classification → time → selected-place detail. Preserve the existing system sans typography, white surfaces (#FFFFFF), cool canvas (#F5F6F8), ink (#1D2633), muted text (#667085), and rules (#E3E7ED). Blue/red encode presidential support; orange/teal encode turnout below/above 2024; categorical place types need their own discrete legend. Violet remains selection only.
+
+```text
+Counties: classification + voting method
+  Daily / cumulative trajectories → cumulative cutoff comparison → county records
+Precincts: shared county + classification + cohort
+  Trends: daily / cumulative trajectories → cumulative bucket matrices
+  Explore: shared geography and cumulative comparison period
+    Texas county overview / selected county precincts | same-scope regression
+    Selected county / precinct profile and local records
+```
+
+| Finding | Recommendation / implementation criterion |
+| --- | --- |
+| County map beside an all-county regression suggests different data are linked | One county state governs both views. Default to a Texas county overview; county selection and point drilldown scope the regression to that county. Returning to Texas resets both. |
+| A bare percentage can mean daily share, cumulative share, or turnout rate | Label ratios as cumulative or same-day **2026 as % of 2024**; counts as votes. None is a percent of registered voters. Keep units in charts, tooltips, accessible descriptions and exports. |
+| Current-source failures are repeated on historical cutoffs | Describe coverage for the selected day. Distinguish incomplete paired geography, unavailable classifications, and a cached latest download. Show missing values as gaps / gray, never zero. |
+| County totals and matched-precinct subsets have different scope | Keep county and precinct workspaces separate; disclose paired subset coverage at the value and in exports. Retain all available same-day pairs. |
+| Daily and cumulative data are interspersed | Keep trajectories together and cutoff snapshots together. A measure control governs the trajectories adjacent to it; cumulative snapshots remain labeled cumulative. |
+| Geographic labels can imply a universal definition | Use documented Census-based NCES locale boundaries with explicitly derived five-type groups and an Other / unclassified residual. Describe residents, never assume voter ethnicity. |
+| Numeric coding of place types invites a meaningless regression | Use category buckets for place comparisons. Any associated OLS keeps a real numeric presidential-share axis and identifies its geographic cohort. |
+| Maps make low-population territory visually dominant | Pair the map with vote-weighted tables and the equal-observation scatter; retain counts, denominators and group counts on interaction/export. |
+| Auto-scaled regression can conceal outliers | Retain the outside-view count and Full range option; include all eligible observations in fit/CSV. |
+
+Recommendations retained for future analysis: compare within-place-type slopes and report county-clustered uncertainty before interpreting differences; offer fixed-membership trend cohorts as an optional sensitivity view alongside the maximum available per-day comparison. Neither is a causal estimate.
+
+Geographic references: [NCES locale definitions](https://nces.ed.gov/surveys/annualreports/topical-studies/locale/definitions), [NCES locale boundaries](https://nces.ed.gov/programs/edge/Geographic/LocaleBoundaries), and [Census urban/rural geography](https://www.census.gov/programs-surveys/geography/guidance/geo-areas/urban-rural.html). The five requested names are a dashboard aggregation, not an official Census five-category standard.

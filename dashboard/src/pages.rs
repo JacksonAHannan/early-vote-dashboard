@@ -186,6 +186,8 @@ pub fn build(root: &Path, out: &Path) -> Result<Summary> {
         snapshot.counties.iter().map(|county| county.id.as_str()),
         &mut p,
     )?;
+    let texas_map: Value = read(root, "geography/texas-counties.geojson")?;
+    p.route("/api/map/texas", &[], &texas_map)?;
     let mut data = serde_json::to_value(&snapshot)?;
     data["regressions"] = serde_json::to_value(regression::summaries(&snapshot))?;
     p.route("/api/data", &[], &data)?;
@@ -203,6 +205,9 @@ pub fn build(root: &Path, out: &Path) -> Result<Summary> {
         p.route(&format!("/api/{route}"), &[], &value)?;
     }
     let census: demographics::Data = read(root, "data/demographics.json")?;
+    let places = crate::places::load(root)?;
+    let place_source: Value = read(root, "places/texas.json")?;
+    p.route("/api/places", &[], &place_source)?;
     let primary: demographics::Data =
         serde_json::from_slice(&std::fs::read(demographics::primary_path(root))?)?;
     p.route("/api/primary", &[], &serde_json::to_value(&primary)?)?;
@@ -218,6 +223,8 @@ pub fn build(root: &Path, out: &Path) -> Result<Summary> {
     );
     p.route("/api/statewide", &[], &statewide)?;
     let county_reference: county_buckets::Reference = read(root, "data/county-reference.json")?;
+    let mut place_county_reference = county_reference.clone();
+    crate::places::county_reference(&mut place_county_reference, &places)?;
     let county_ids: Vec<&str> = std::iter::once("all")
         .chain(snapshot.counties.iter().map(|c| c.id.as_str()))
         .collect();
@@ -230,6 +237,7 @@ pub fn build(root: &Path, out: &Path) -> Result<Summary> {
             ("partisan", None),
             ("demographic", Some(&census)),
             ("primary", Some(&primary)),
+            ("place", Some(&places)),
         ] {
             let metrics: Vec<&str> = classification
                 .map(|d| d.metrics.iter().map(|m| m.id.as_str()).collect())
@@ -297,11 +305,13 @@ pub fn build(root: &Path, out: &Path) -> Result<Summary> {
         for day in 1..=snapshot.days {
             for (view, metrics) in [
                 ("partisan", vec!["presidential_margin"]),
+                ("place", vec![crate::places::METRIC]),
                 (
                     "demographic",
                     county_reference
                         .metrics
                         .iter()
+                        .filter(|m| m.unit == "percent")
                         .map(|m| m.id.as_str())
                         .collect(),
                 ),
@@ -315,7 +325,17 @@ pub fn build(root: &Path, out: &Path) -> Result<Summary> {
                             ("day", &day.to_string()),
                             ("method", voting_method),
                         ],
-                        &county_buckets::analyze(&statewide, &county_reference, view, metric, day)?,
+                        &county_buckets::analyze(
+                            &statewide,
+                            if view == "place" {
+                                &place_county_reference
+                            } else {
+                                &county_reference
+                            },
+                            view,
+                            metric,
+                            day,
+                        )?,
                     )?;
                 }
             }
