@@ -123,7 +123,15 @@ function renderJointMatrix(){
  const metricLabel=m.label+(m.denominator==='vap'?' age 18+':''),total=view.coverage.included;
  const cell=(value,label,pooled=false)=>{
   const title=`${label}: ${number(value.votes_2026)} / ${number(value.votes_2024)} votes; ${number(value.groups)} groups`;
-  let background='';if(!pooled&&value.ratio!==null){const difference=Math.max(-.5,Math.min(.5,value.ratio-1)),rgb=difference<0?'165,95,39':'19,123,138';background=` style="background:rgba(${rgb},${Math.abs(difference)*.55})"`;}
+  let background='';
+  if(!pooled&&Number.isFinite(value.ratio)){
+   const strength=Math.min(1,Math.abs(value.ratio-1)/.3),tint=value.ratio<1?[164,62,24]:[0,104,115];
+   const rgb=tint.map(channel=>Math.round(255+(channel-255)*strength));
+   const linear=rgb.map(channel=>{const s=channel/255;return s<=.04045?s/12.92:((s+.055)/1.055)**2.4;});
+   const luminance=.2126*linear[0]+.7152*linear[1]+.0722*linear[2];
+   const textColor=1.05/(luminance+.05)>=4.5?'#fff':'#000';
+   background=` style="background:rgb(${rgb.join(',')});color:${textColor}"`;
+  }
   return `<td${pooled?' class="matrix-total"':''}${background} tabindex="0" aria-label="${esc(title)}" title="${esc(title)}"><span class="ratio">${percent(value.ratio)}${value.ratio!==null&&small(value)?'†':''}</span></td>`;
  };
  let html=`<table class="joint-table" style="min-width:calc(var(--matrix-label-width) + var(--matrix-total-width) + ${matrix.columns.length*110}px)"><thead><tr><th scope="col">${esc(metricLabel)} (%)</th><th class="matrix-total" scope="col">All</th>`+matrix.columns.map((label,i)=>`<th scope="col" style="border-bottom:3px solid ${colors[i]||'#a6afbc'}">${esc(label)}</th>`).join('')+'</tr></thead><tbody>';
