@@ -879,6 +879,15 @@ async fn main() -> Result<()> {
             }),
         )
         .route(
+            "/motion.js",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript")],
+                    include_str!("../static/motion.js"),
+                )
+            }),
+        )
+        .route(
             "/atlas.js",
             get(|| async {
                 (

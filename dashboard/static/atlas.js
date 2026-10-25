@@ -22,7 +22,7 @@ const Atlas=window.Atlas={
   document.addEventListener('pointerdown',event=>{if(event.pointerType==='touch'){this.touchInput=true;this.hideTooltip();}},{capture:true,passive:true});
   document.addEventListener('pointermove',event=>{if(event.pointerType==='mouse'&&!event.sourceCapabilities?.firesTouchEvents)this.touchInput=false;},{capture:true,passive:true});
   document.addEventListener('keydown',event=>{this.touchInput=false;if(event.key==='Escape')this.hideTooltip();},{capture:true});
-  this.map.on('resize',()=>{if(!this.layer||!this.visible())return;if(this.active?.county===this.county)this.zoomGroup(this.active.group_index,this.native,false);else this.map.fitBounds(this.layer.getBounds(),{padding:[24,24],animate:false});});
+  this.map.on('resize',()=>{if(!this.layer||!this.visible()||!$('map-loading').hidden)return;this.fitView(false);});
   new ResizeObserver(()=>{if(this.visible())this.map.invalidateSize({pan:false});}).observe($('county-map'));
   this.showCounty(this.county,true);
  },
@@ -121,12 +121,14 @@ const Atlas=window.Atlas={
   this.map.attributionControl.addAttribution(source);this.geographyAttribution=source;
  },
  async showTexas(fit=true){
+  const animate=Motion.active();Motion.stop(this.map);
   this.attribution('U.S. Census Bureau');
   this.hideTooltip();this.county='all';$('map-county').value='all';const token=++this.request;
-  this.layer?.remove();this.layer=null;this.layers.clear();$('map-loading').hidden=false;$('map-loading').textContent='Loading Texas…';
+  $('map-loading').hidden=false;$('map-loading').textContent='Loading Texas…';
   try{
    let geo=this.cache.get('all');if(!geo){const response=await fetch('/api/map/texas');if(!response.ok)throw Error('Texas county map unavailable');geo=await response.json();this.cache.set('all',geo);}
    if(token!==this.request)return;
+   const previous=this.layer;this.layers.clear();
    this.layer=L.geoJSON(geo,{style:f=>this.style(f),onEachFeature:(feature,layer)=>{
     const id=feature.properties.county;this.layers.set(id,layer);layer.bindTooltip(()=>this.overviewTooltip(feature),{sticky:true});
     const available=this.ctx.data.counties.some(c=>c.id===id);
@@ -134,19 +136,19 @@ const Atlas=window.Atlas={
     layer.on('mouseover',()=>{this.hover(id,null);layer.setStyle({color:'#713bc2',weight:2});this.raise(layer);});layer.on('mouseout',()=>this.hover(null,null));
    }}).addTo(this.map);
    this.layer.eachLayer((layer)=>{const el=layer.getElement();if(!el)return;el.dataset.county=layer.feature.properties.county;el.setAttribute('role','button');el.setAttribute('tabindex',this.layers.values().next().value===layer?'0':'-1');el.setAttribute('aria-label',`${layer.feature.properties.name} County: ${this.ctx.rows.get(layer.feature.properties.county)?.length||0} matched precinct groups`);el.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();if(this.ctx.data.counties.some(c=>c.id===layer.feature.properties.county))this.ctx.onCounty(layer.feature.properties.county);else this.ctx.onCountyTotals(layer.feature.properties.county);}else if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();const rows=[...this.layers.values()],i=rows.indexOf(layer),next=rows[(i+(['ArrowLeft','ArrowUp'].includes(event.key)?-1:1)+rows.length)%rows.length];el.tabIndex=-1;next.getElement().tabIndex=0;next.getElement().focus();}};el.onfocus=()=>{this.hover(layer.feature.properties.county,null);layer.openTooltip();};el.onblur=()=>{layer.closeTooltip();this.hover(null,null);};});
-   const waiting=this.ctx.mode!=='partisan'&&!demoReady();$('map-loading').hidden=!waiting;if(waiting)$('map-loading').textContent='Loading comparison…';if(fit&&this.visible())this.map.fitBounds(this.layer.getBounds(),{padding:[16,16],animate:false});this.legend();this.profile();
-  }catch(error){if(token===this.request)$('map-loading').textContent=error.message;}
+   const waiting=this.ctx.mode!=='partisan'&&!demoReady();$('map-loading').hidden=!waiting;if(waiting)$('map-loading').textContent='Loading comparison…';if(fit&&this.visible())Motion.fit(this.map,this.layer.getBounds(),{padding:[16,16]},animate,previous);else previous?.remove();this.legend();this.profile();
+  }catch(error){if(token===this.request){$('map-loading').textContent=error.message;this.layer?.remove();this.layer=null;this.layers.clear();}}
  },
  async showCounty(id,fit=true){
   if(id==='all')return this.showTexas(fit);
+  const animate=Motion.active();Motion.stop(this.map);
   this.attribution('Texas Legislative Council');
-  this.layer?.remove();this.layer=null;this.layers.clear();
   this.hideTooltip();this.county=id;$('map-county').value=id;const token=++this.request;
   $('map-loading').hidden=false;$('map-loading').textContent='Loading precincts…';
   try{
    let geo=this.cache.get(id);if(!geo){const response=await fetch(`/api/map/${encodeURIComponent(id)}`);if(!response.ok)throw Error('County map unavailable');geo=await response.json();this.cache.set(id,geo);}
    if(token!==this.request)return;
-   if(this.layer)this.layer.remove();this.layers.clear();
+   const previous=this.layer;this.layers.clear();
    this.layer=L.geoJSON(geo,{style:f=>this.style(f),onEachFeature:(feature,layer)=>{
     this.layers.set(feature.properties.precinct,layer);
     layer.on('click',()=>{this.hideTooltip();this.ctx.onSelect(id,feature.properties.group,feature.properties.precinct,true);});
@@ -159,9 +161,9 @@ const Atlas=window.Atlas={
     el.addEventListener('focus',()=>{if(this.touchInput)return;for(const sibling of this.layers.values())sibling.getElement()?.setAttribute('tabindex',sibling===layer?'0':'-1');this.hover(id,layer.feature.properties.group);this.showTooltip(layer.feature,null,layer);});el.addEventListener('blur',()=>{this.hideTooltip();this.hover(null,null);});
     el.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();this.hideTooltip();this.ctx.onSelect(id,layer.feature.properties.group,layer.feature.properties.precinct,true);}else if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();const layers=[...this.layers.values()],index=layers.indexOf(layer),next=layers[(index+(['ArrowLeft','ArrowUp'].includes(event.key)?-1:1)+layers.length)%layers.length];el.tabIndex=-1;const target=next.getElement();if(!this.map.getBounds().contains(next.getBounds().getCenter()))this.map.panTo(next.getBounds().getCenter(),{animate:false});target.tabIndex=0;target.focus({preventScroll:true});}});
    }});
-   $('map-loading').hidden=true;if(fit&&this.visible())this.map.fitBounds(this.layer.getBounds(),{padding:[24,24],animate:false});
+   $('map-loading').hidden=true;
    this.repaint();this.legend();this.profile();
-   if(this.active?.county===id)this.zoomGroup(this.active.group_index,this.native,false);
+   if(fit&&this.visible())this.fitView(animate,false,previous);else previous?.remove();
   }catch(error){if(token===this.request){$('map-loading').textContent=error.message;this.layer?.remove();this.layers.clear();this.profile();}}
  },
  async focus(id,index,precinct=null,zoom=true){
@@ -170,12 +172,17 @@ const Atlas=window.Atlas={
   if(this.active?.county!==id||this.active.group_index!==index)return;
   this.repaint();this.profile();if(zoom)this.zoomGroup(index,precinct,true);
  },
- zoomGroup(index,precinct,animate){
+ fitView(animate=false,intro=false,previous=null){
+  if(!this.layer||!this.visible()){previous?.remove();return;}
+  if(this.active?.county===this.county)this.zoomGroup(this.active.group_index,this.native,animate,intro,previous);
+  else Motion.fit(this.map,this.layer.getBounds(),{padding:[24,24]},animate,previous,intro);
+ },
+ zoomGroup(index,precinct,animate,intro=false,previous=null){
   if(!this.visible())return;
   let layers=precinct&&this.layers.has(precinct)?[this.layers.get(precinct)]:[...this.layers.values()].filter(l=>l.feature.properties.group===index);
-  if(!layers.length)return;
-  const bounds=L.featureGroup(layers).getBounds();if(!bounds.isValid())return;
-  this.map.fitBounds(bounds,{padding:[36,36],maxZoom:15,animate:animate&&!matchMedia('(prefers-reduced-motion: reduce)').matches,duration:.45});
+  if(!layers.length){previous?.remove();return;}
+  const bounds=L.featureGroup(layers).getBounds();
+  Motion.fit(this.map,bounds,{padding:[36,36],maxZoom:15},animate,previous,intro);
   this.markSelection();
  },
  markSelection(){
@@ -196,7 +203,7 @@ const Atlas=window.Atlas={
   this.layer.eachLayer(layer=>{layer.setStyle(this.style(layer.feature));if(this.county==='all'?layer.feature.properties.county===id:id===this.county&&layer.feature.properties.group===index){layer.setStyle({color:'#713bc2',weight:2});this.raise(layer);}});
  },
  reset(){if(this.county!=='all'){this.ctx.onCounty('all');return;}this.clearSelection();},
- clearSelection(){this.hideTooltip();this.active=null;this.native=null;this.ctx.onClear();this.repaint();if(this.layer&&this.visible())this.map.fitBounds(this.layer.getBounds(),{padding:[24,24],animate:!matchMedia('(prefers-reduced-motion: reduce)').matches,duration:.4});this.profile();},
+ clearSelection(){this.hideTooltip();this.active=null;this.native=null;this.ctx.onClear();this.repaint();if(this.layer&&this.visible())Motion.fit(this.map,this.layer.getBounds(),{padding:[24,24]},Motion.active());this.profile();},
  legend(){
   $('map-reset').hidden=false;$('map-reset').textContent=this.county==='all'?'Reset zoom':'All Texas';
   const demo=this.ctx.mode!=='partisan',turnout=$('map-layer').value==='turnout';

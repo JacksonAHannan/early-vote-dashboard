@@ -32,7 +32,7 @@ const Visuals=window.Visuals={
   const status=document.createElement('div');status.id='image-status';status.className='image-status';status.setAttribute('role','status');status.setAttribute('aria-live','polite');document.body.append(status);
   document.addEventListener('click',event=>{
    const toggle=event.target.closest('[data-panel]');if(toggle){this.toggle(toggle.dataset.panel);return;}
-   const all=event.target.closest('[data-panels]');if(all){if(all.dataset.panels==='collapse'&&Atlas.map&&!this.collapsed.has('map-panel'))this.mapView={center:Atlas.map.getCenter(),zoom:Atlas.map.getZoom(),county:Atlas.county};for(const [id]of this.panels)if($(id).getBoundingClientRect().width)all.dataset.panels==='collapse'?this.collapsed.add(id):this.collapsed.delete(id);this.save();for(const [id]of this.panels)this.applyPanel(id);this.reflow();return;}
+   const all=event.target.closest('[data-panels]');if(all){Motion.finish();if(all.dataset.panels==='collapse'&&Atlas.map&&!this.collapsed.has('map-panel'))this.mapView={center:Atlas.map.getCenter(),zoom:Atlas.map.getZoom(),county:Atlas.county};for(const [id]of this.panels)if($(id).getBoundingClientRect().width)all.dataset.panels==='collapse'?this.collapsed.add(id):this.collapsed.delete(id);this.save();for(const [id]of this.panels)this.applyPanel(id);this.reflow();return;}
    const image=event.target.closest('[data-image]');if(image)this.download(image.dataset.image,image);
   });
   new MutationObserver(()=>{if(!this.queued){this.queued=true;queueMicrotask(()=>{this.queued=false;this.sync();});}}).observe(document.querySelector('main'),{childList:true,subtree:true});
@@ -40,8 +40,8 @@ const Visuals=window.Visuals={
  },
  imageButton(key,label){const b=document.createElement('button');b.type='button';b.className='image-export';b.dataset.image=key;b.textContent='PNG ↓';b.title=label;b.setAttribute('aria-label',label);return b;},
  save(){try{localStorage.setItem(this.storageKey,JSON.stringify([...this.collapsed]));}catch(_){}},
- applyPanel(id){const root=$(id),closed=this.collapsed.has(id),label=this.panels.find(p=>p[0]===id)[2],button=root.querySelector('[data-panel]');root.classList.toggle('is-collapsed',closed);$(id+'-body').hidden=closed;button.setAttribute('aria-expanded',String(!closed));button.setAttribute('aria-label',`${closed?'Expand':'Collapse'} ${label.toLowerCase()}`);button.title=button.getAttribute('aria-label');},
- toggle(id){if(!this.collapsed.has('map-panel')&&Atlas.map)this.mapView={center:Atlas.map.getCenter(),zoom:Atlas.map.getZoom(),county:Atlas.county};this.collapsed.has(id)?this.collapsed.delete(id):this.collapsed.add(id);this.save();this.applyPanel(id);this.reflow();},
+ applyPanel(id){const root=$(id),closed=this.collapsed.has(id),label=this.panels.find(p=>p[0]===id)[2],button=root.querySelector('[data-panel]');root.classList.toggle('is-collapsed',closed);const body=$(id+'-body'),wasHidden=body.hidden;body.hidden=closed;if(wasHidden&&!closed)Motion.reveal(body);button.setAttribute('aria-expanded',String(!closed));button.setAttribute('aria-label',`${closed?'Expand':'Collapse'} ${label.toLowerCase()}`);button.title=button.getAttribute('aria-label');},
+ toggle(id){Motion.finish();if(!this.collapsed.has('map-panel')&&Atlas.map)this.mapView={center:Atlas.map.getCenter(),zoom:Atlas.map.getZoom(),county:Atlas.county};this.collapsed.has(id)?this.collapsed.delete(id):this.collapsed.add(id);this.save();this.applyPanel(id);this.reflow();},
  reflow(){requestAnimationFrame(()=>{window.dispatchEvent(new Event('resize'));requestAnimationFrame(()=>{if(Atlas.map&&!this.collapsed.has('map-panel')){Atlas.map.invalidateSize({pan:false});if(this.mapView){if(this.mapView.county===Atlas.county)Atlas.map.setView(this.mapView.center,this.mapView.zoom,{animate:false});else if(Atlas.layer){if(Atlas.active?.county===Atlas.county)Atlas.zoomGroup(Atlas.active.group_index,Atlas.native,false);else Atlas.map.fitBounds(Atlas.layer.getBounds(),{padding:[24,24],animate:false});}this.mapView=null;}}});});},
  addImage(selector,key,label){const heading=document.querySelector(selector);if(heading&&!heading.querySelector(`[data-image="${key}"]`))heading.append(this.imageButton(key,label));},
  sync(){
@@ -180,7 +180,7 @@ const Visuals=window.Visuals={
   if(this.busy)return;this.busy=true;button.disabled=true;this.status('Preparing PNG…');
   try{
    if(!data)throw Error('Wait for the dashboard to load');
-   await document.fonts.ready;const desc=this.descriptor(key),capture=await this.capture(desc),canvas=document.createElement('canvas');canvas.width=1600;canvas.height=1000;
+   await document.fonts.ready;Motion.finish();const desc=this.descriptor(key),capture=await this.capture(desc),canvas=document.createElement('canvas');canvas.width=1600;canvas.height=1000;
    const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,1600,1000);ctx.fillStyle='#66758a';ctx.font='22px Arial,sans-serif';ctx.fillText('Texas early vote',48,43);
    ctx.font='bold 36px Arial,sans-serif';ctx.fillStyle='#1d2633';const titles=this.wrapText(ctx,desc.title,1504);titles.forEach((line,i)=>ctx.fillText(line,48,98+i*43));
    let top=98+(titles.length-1)*43;ctx.fillStyle='#66758a';ctx.font='21px Arial,sans-serif';const context=[desc.scope,desc.classification,desc.cohortLabel,desc.static?'':`Day ${desc.day}`].filter(Boolean).join(' · ');for(const line of this.wrapText(ctx,context,1504)){top+=29;ctx.fillText(line,48,top);}

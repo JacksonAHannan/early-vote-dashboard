@@ -3,7 +3,7 @@
 const Navigation=window.Navigation={
  level:'counties',section:'trends',
  show(level,section=this.section,write=true){
-  this.level=level;this.section=section;
+  const changed=this.level!==level||this.section!==section;this.level=level;this.section=section;
   $('county-workspace').hidden=level!=='counties';$('precinct-workspace').hidden=level!=='precincts';
   $('counties-tab').setAttribute('aria-pressed',String(level==='counties'));$('precincts-tab').setAttribute('aria-pressed',String(level==='precincts'));
   $('precinct-trends').hidden=section!=='trends';$('precinct-explore').hidden=section!=='explore';
@@ -12,6 +12,7 @@ const Navigation=window.Navigation={
   window.dispatchEvent(new Event('resize'));
   if(data){const limit=availableDays();if(day>limit){day=limit;page=0;bucket=null;updateView();}else renderDayControls();}
   if(level==='counties')CountyView.update();
+  if(changed&&write){Motion.reveal($(level==='counties'?'county-workspace':'precinct-'+section));if(level==='precincts'&&section==='explore')requestAnimationFrame(()=>{if($('map-loading').hidden&&Atlas.visible())Atlas.fitView(Motion.active(),true);});}
  },
  init(){
   $('counties-tab').onclick=()=>this.show('counties');$('precincts-tab').onclick=()=>this.show('precincts');
@@ -75,6 +76,7 @@ const CountyView=window.CountyView={
   const rows=[['geography','view','metric','method','bucket','daily_counties','cumulative_counties','day','date_2024','date_2026','daily_2024','daily_2026','cumulative_2024','cumulative_2026','daily_county_ids','cumulative_county_ids']];
   for(const b of panels)for(const d of Tracking.paired(b.days,false,this.view.observed_days))rows.push(['county',this.mode,this.mode==='partisan'?'presidential_margin':this.metricId,this.votingMethod,b.label,d.groups??d.daily_groups??b.groups,d.cumulative_groups??b.cumulative_groups,d.day,d.date_2024,d.date_2026,d.daily_2024,d.daily_2026,d.cumulative_2024,d.cumulative_2026,(d.county_ids||[]).join(';'),(d.cumulative_county_ids||[]).join(';')]);
   this.download=csvLink('county-bucket-download',rows,`county-buckets-${this.mode}-${this.mode==='partisan'?'presidential':this.metricId}.csv`,this.download);
+  Motion.chart($('county-daily-charts'),this.key+'|'+this.measure);Motion.chart($('county-bucket-summary'),this.key);
   if(Tracking.state)Tracking.renderState();window.Visuals?.sync();
  },
  init(){

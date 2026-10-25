@@ -103,3 +103,9 @@ Precincts: shared county + classification + cohort
 Recommendations retained for future analysis: compare within-place-type slopes and report county-clustered uncertainty before interpreting differences; offer fixed-membership trend cohorts as an optional sensitivity view alongside the maximum available per-day comparison. Neither is a causal estimate.
 
 Geographic references: [NCES locale definitions](https://nces.ed.gov/surveys/annualreports/topical-studies/locale/definitions), [NCES locale boundaries](https://nces.ed.gov/programs/edge/Geographic/LocaleBoundaries), and [Census urban/rural geography](https://www.census.gov/programs-surveys/geography/guidance/geo-areas/urban-rural.html). The five requested names are a dashboard aggregation, not an official Census five-category standard.
+
+## Analytical motion
+
+Motion answers navigation and comparison changes. A 700 ms map flight shows the relationship between Texas, a county and a selected precinct group; state changes use the same camera behavior. Keep the prior geometry behind the destination until travel finishes, then remove it. A map below the headline waits until it enters the viewport before its entry zoom, so the transition is visible. New selections interrupt the prior destination.
+
+Sections reveal over 260 ms; changed chart cohorts crossfade over 200 ms without tweening numeric labels or changing analytical values. Do not animate every panel on page load, hover a whole dashboard, or replay motion on hourly background refresh. Keep the established palette, typography and grouping. Expanding a collapsed panel reveals its content while preserving the saved map camera. Reduced-motion preferences apply immediately to all navigation; image exports settle camera and visual styles before capture.

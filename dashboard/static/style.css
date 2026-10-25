@@ -68,3 +68,10 @@ a.download[aria-disabled="true"]{opacity:.45;pointer-events:none}
 .data-note{font-size:12px;color:#667085;line-height:1.5;margin:12px 0 0}.regression-actions{flex-wrap:wrap}
 
 .regression-key{padding:0 0 12px;font-size:11px;line-height:1.5}.regression-key span{white-space:nowrap}
+
+/* Motion follows analytical actions; maps retain their own camera transforms. */
+@media(prefers-reduced-motion:no-preference){
+ button,.download,select{transition:background-color .16s,border-color .16s,color .16s}
+ .leaflet-interactive{transition:fill .2s,fill-opacity .18s,stroke .18s,stroke-width .18s}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important}}
