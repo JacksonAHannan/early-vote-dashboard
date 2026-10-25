@@ -140,7 +140,7 @@ function renderJointMatrix(){
  $('matrix').innerHTML=html;
  const counties=new Set(view.points.map(point=>point.county)).size;
  $('matrix-context').textContent=`${number(total.groups)} precinct groups · ${number(counties)} ${counties===1?'county':'counties'}`;
- $('matrix-context').title=`${number(view.coverage.missing_demographics.groups+view.coverage.invalid_demographics.groups+view.coverage.zero_denominator.groups)} groups lack usable Census counts. Mixed or unknown partisan bands remain in their own column.`;
+ $('matrix-context').title=`${number(view.coverage.missing_demographics.groups+view.coverage.invalid_demographics.groups+view.coverage.zero_denominator.groups)} groups lack usable Census counts. Partisan bands use the combined 2024 presidential margin of each compared group. Tied or missing returns remain in their own column.`;
  const dates=comparisonPeriod(),rows=[['county_scope','through_2026','through_2024','metric','cohort','demographic_bucket','partisan_bucket','groups','votes_2024','votes_2026','ratio']];
  view.bins.forEach((bin,i)=>matrix.cells[i].forEach((value,j)=>rows.push([county,dates.through_2026,dates.through_2024,jointMetricId,cohort,bin.label,matrix.columns[j],value.groups,value.votes_2024,value.votes_2026,value.ratio])));
  bucketUrl=csvLink('download',rows,`demographic-partisan-${jointMetricId}-${county}-day-${day}-${cohort}.csv`,bucketUrl);

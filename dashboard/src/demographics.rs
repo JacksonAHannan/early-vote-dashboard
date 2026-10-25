@@ -5,7 +5,7 @@ use anyhow::{Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-const COHORT_METHOD: &str = "Demographic matched cohorts include all common geographic groups with complete demographic counts, including mixed partisan-margin groups. Partisan classification exclusions apply only to partisan views. The unchanged cohort retains the existing strict unchanged flag.";
+const COHORT_METHOD: &str = "Demographic matched cohorts include all common geographic groups with complete demographic counts, including mixed partisan-margin groups. Partisan classification exclusions apply only to partisan views. The unchanged cohort retains the existing strict unchanged flag. Joint matrix columns use each common geographic group’s combined complete 2024 presidential margin; tied, zero-vote and missing returns remain unknown.";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Metric {
@@ -103,7 +103,8 @@ pub struct Coverage {
 }
 
 /// The existing Census buckets crossed with the established partisan bands.
-/// The last column retains mixed-margin, tied and missing presidential groups.
+/// Each common geography uses its complete combined 2024 presidential margin.
+/// The last column retains tied, zero-vote and missing presidential groups.
 #[derive(Debug, Serialize)]
 pub struct PartisanMatrix {
     pub columns: Vec<String>,
@@ -116,7 +117,7 @@ impl PartisanMatrix {
         let columns: Vec<_> = crate::LABELS
             .iter()
             .copied()
-            .chain(["Mixed / unknown"])
+            .chain(["Tied / unknown"])
             .map(str::to_owned)
             .collect();
         Self {
@@ -337,7 +338,16 @@ pub fn analyze(
             bin.groups += 1;
             bin.votes_2024 += group.votes_2024;
             bin.votes_2026 += group.votes_2026;
-            partisan_matrix.add(bucket, group.bucket, group.votes_2024, group.votes_2026);
+            // The standalone partisan view requires every old member to share a
+            // band. The joint matrix instead classifies the compared geography
+            // by its combined return. Incomplete references have both totals
+            // zeroed by crate::analyze(); never fall back to a partial member return.
+            partisan_matrix.add(
+                bucket,
+                crate::classify(group.harris, group.trump),
+                group.votes_2024,
+                group.votes_2026,
+            );
             coverage.included.add(group.votes_2024, group.votes_2026);
             if group.votes_2024 == 0 {
                 coverage.omitted_zero_baseline += 1;
@@ -433,7 +443,7 @@ mod tests {
 
     fn group(new: &[&str], old: u64, current: u64) -> serde_json::Value {
         json!({"old":["old"],"new":new,"votes_2024":old,"votes_2026":current,
-            "bucket":0,"unchanged":true,"reason":"","harris":60,"trump":40})
+            "bucket":0,"unchanged":true,"reason":"","harris":80,"trump":20})
     }
 
     #[test]
@@ -586,7 +596,7 @@ mod tests {
     fn assert_matrix_partitions(view: &View) {
         let matrix = &view.partisan_matrix;
         assert_eq!(matrix.columns.len(), crate::LABELS.len() + 1);
-        assert_eq!(matrix.columns.last().unwrap(), "Mixed / unknown");
+        assert_eq!(matrix.columns.last().unwrap(), "Tied / unknown");
         assert_eq!(matrix.cells.len(), view.bins.len());
         for (row, bin) in matrix.cells.iter().zip(&view.bins) {
             assert_eq!(row.iter().map(|c| c.groups).sum::<u64>(), bin.groups);
@@ -639,6 +649,44 @@ mod tests {
     }
 
     #[test]
+    fn joint_matrix_classifies_complete_group_returns_even_when_member_bands_differ() {
+        // A common geography can span several member margin bands. Its combined
+        // presidential return still determines a valid matrix column.
+        let mut mixed = group(&["a"], 100, 80);
+        mixed["old"] = json!(["old-a", "old-b"]);
+        mixed["bucket"] = serde_json::Value::Null;
+        mixed["unchanged"] = json!(false);
+        mixed["harris"] = json!(6374);
+        mixed["trump"] = json!(3092);
+        let (s, d) = inputs(json!([mixed]), json!({"a":{"counts":{"n":90,"d":100}}}));
+        let v = analyze(&s, &d, "all", 1, "matched", "share").unwrap();
+        assert_eq!(v.partisan_matrix.cells[4][0].votes_2024, 100);
+        assert_eq!(v.partisan_matrix.cells[4][6].groups, 0);
+        assert_eq!(v.coverage.included.votes_2026, 80);
+    }
+
+    #[test]
+    fn joint_matrix_keeps_tied_and_missing_returns_unknown() {
+        let mut tied = group(&["tie"], 10, 15);
+        tied["harris"] = json!(50);
+        tied["trump"] = json!(50);
+        let mut missing = group(&["missing"], 20, 25);
+        missing["harris"] = json!(0);
+        missing["trump"] = json!(0);
+        // Even an old cached bucket must not override an unusable return.
+        let (s, d) = inputs(
+            json!([tied, missing]),
+            json!({"tie":{"counts":{"n":90,"d":100}},
+                "missing":{"counts":{"n":90,"d":100}}}),
+        );
+        let v = analyze(&s, &d, "all", 1, "matched", "share").unwrap();
+        assert_eq!(v.partisan_matrix.totals[6].votes_2024, 30);
+        assert_eq!(v.partisan_matrix.totals[6].votes_2026, 40);
+        assert_eq!(v.partisan_matrix.totals[0].groups, 0);
+        assert_matrix_partitions(&v);
+    }
+
+    #[test]
     fn joint_matrix_pools_votes_and_respects_demographic_cut_boundaries() {
         let mut trump_a = group(&["a"], 100, 80);
         trump_a["bucket"] = json!(5);
@@ -650,6 +698,8 @@ mod tests {
         trump_b["votes_2026"] = json!(450);
         let mut middle = group(&["d"], 10, 20);
         middle["bucket"] = json!(2);
+        middle["harris"] = json!(55);
+        middle["trump"] = json!(45);
         let (s, d) = inputs(
             json!([trump_a, trump_b, group(&["c"], 100, 120), middle]),
             json!({"a":{"counts":{"n":80,"d":100}},"b":{"counts":{"n":100,"d":100}},
@@ -672,6 +722,8 @@ mod tests {
     fn joint_matrix_preserves_unknowns_and_existing_completeness_and_cohort_rules() {
         let mut mixed = group(&["mixed"], 20, 16);
         mixed["bucket"] = serde_json::Value::Null;
+        mixed["harris"] = json!(0);
+        mixed["trump"] = json!(0);
         let mut unavailable = group(&["unavailable"], 200, 180);
         unavailable["available"] = json!(false);
         let mut changed = group(&["changed"], 30, 24);
@@ -703,6 +755,8 @@ mod tests {
     fn joint_matrix_retains_zero_baseline_votes_and_distinguishes_empty_from_zero_turnout() {
         let mut zero_current = group(&["zero"], 100, 0);
         zero_current["bucket"] = json!(5);
+        zero_current["harris"] = json!(20);
+        zero_current["trump"] = json!(80);
         let (s, d) = inputs(
             json!([
                 group(&["new"], 0, 7),

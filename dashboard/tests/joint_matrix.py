@@ -17,7 +17,7 @@ STATIC=os.environ.get('TURNOUT_JOINT_STATIC')=='1'
 TAG=os.environ.get('TURNOUT_TEST_TAG','local')
 OUT=ROOT/'analysis/joint-matrix'/TAG;OUT.mkdir(parents=True,exist_ok=True)
 REPORT={'url':BASE,'static':STATIC,'checks':[],'assertions':0,'api_cases':0,'javascript_errors':[]}
-LABELS=['Harris 30+','Harris 15–30','Harris 0–15','Trump 0–15','Trump 15–30','Trump 30+','Mixed / unknown']
+LABELS=['Harris 30+','Harris 15–30','Harris 0–15','Trump 0–15','Trump 15–30','Trump 30+','Tied / unknown']
 def check(condition,detail):
  REPORT['assertions']+=1
  assert condition,detail
@@ -35,7 +35,19 @@ def api(path):
   check(hashlib.sha256(raw).hexdigest()==Path(file).name.split('.')[0],file)
   return json.loads(raw)
  return json.loads(read(path.lstrip('/')))
-def oracle(snapshot,demographics,metric,day,cohort):
+@lru_cache(maxsize=1)
+def presidential_references():
+ return {r['id']:r['presidential'] for r in api('/api/reference')}
+def matrix_column(county,group):
+ # Independently sum raw reference members, rather than trusting the snapshot's
+ # homogeneous-member bucket or its derived combined presidential totals.
+ returns=presidential_references()[county]
+ if any(p not in returns for p in group['old']):return 6
+ h=sum(returns[p]['harris'] for p in group['old']);t=sum(returns[p]['trump'] for p in group['old'])
+ if h==t:return 6
+ share=h/(h+t)
+ return 0 if share>=.65 else 1 if share>=.575 else 2 if share>.5 else 3 if share>.425 else 4 if share>.35 else 5
+def oracle(snapshot,demographics,metric,day,cohort,homogeneous=False):
  result={};cuts=[v for v in metric['cuts'] if 0<v<100]
  for c in snapshot['counties']:
   cells=[[[0,0,0] for j in LABELS] for i in range(len(cuts)+1)]
@@ -48,7 +60,7 @@ def oracle(snapshot,demographics,metric,day,cohort):
    if not values or any(n is None or d is None or not math.isfinite(n) or not math.isfinite(d) or not 0<=n<=d for n,d in values):continue
    n=sum(v[0] for v in values);d=sum(v[1] for v in values)
    if not d:continue
-   i=bisect.bisect_right(cuts,n/d*100);j=g['bucket'] if g['bucket'] is not None and g['bucket']<6 else 6
+   i=bisect.bisect_right(cuts,n/d*100);j=(g['bucket'] if g['bucket'] is not None else 6) if homogeneous else matrix_column(c['id'],g)
    for k,v in enumerate((1,g['votes_2024'],g['votes_2026'])):cells[i][j][k]+=v
   result[c['id']]=cells
  result['all']=[[[sum(cells[i][j][k] for cells in result.values()) for k in range(3)] for j in range(7)] for i in range(len(cuts)+1)]
@@ -77,6 +89,15 @@ def api_acceptance():
     assert_cohort(v['bins'][i],[sum(c[k] for c in row) for k in range(3)],(county,i,'row margin'))
    for j in range(7):assert_cohort(matrix['totals'][j],[sum(row[j][k] for row in cells) for k in range(3)],(county,j,'column margin'))
    assert_cohort(v['coverage']['included'],[sum(cell[k] for row in cells for cell in row) for k in range(3)],(county,'grand total'))
+  before=oracle(snapshot,data,metric,day,cohort,homogeneous=True)['all'];after=expected['all']
+  for oldrow,newrow in zip(before,after):
+   for j in range(6):check(all(newrow[j][k]>=oldrow[j][k] for k in range(3)),('previously classified votes retained',metric['id'],j))
+   check([sum(c[k] for c in oldrow) for k in range(3)]==[sum(c[k] for c in newrow) for k in range(3)],'classification preserves demographic row totals')
+  if cohort=='unchanged':check(before==after,'strict unchanged matrix remains identical')
+  REPORT.setdefault('classification_impact',[]).append({'metric':metric['id'],'day':day,'cohort':cohort,
+   'groups':sum(c[0] for row in after for c in row),
+   'unknown_before':sum(row[6][0] for row in before),'unknown_after':sum(row[6][0] for row in after),
+   'newly_classified_2024_votes':sum(old[6][1]-new[6][1] for old,new in zip(before,after))})
   REPORT['api_cases']+=1;print(f"API {view}/{metric['id']}/{cohort}/day{day} passed",flush=True)
  REPORT['checks'].append('Independent Census member-count sums, group eligibility, partisan membership and all joint cells/marginals match across counties, metrics, days and cohorts')
 def browser_cells(page):
