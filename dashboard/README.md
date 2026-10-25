@@ -6,7 +6,7 @@ Rust scraper, analysis, scheduler and HTTP server. The Counties workspace compar
 ./dashboard/run.sh
 ```
 
-Open **http://127.0.0.1:8741**. It starts with the saved snapshot and checks official sources immediately, then every hour while running. The browser checks for completed refreshes every five seconds. Stop with Ctrl+C. No machine-wide service is installed.
+Open **http://127.0.0.1:8741**. It starts with the saved snapshot and checks official sources immediately, then every hour while running. The browser reloads data once an hour; after a manual refresh, it checks completion only until that requested refresh finishes. Stop with Ctrl+C. No machine-wide service is installed.
 
 The default cutoff is yesterday in America/Chicago, capped at October 30, 2026. Equivalent calendar days are compared from October 19, 2026 and October 21, 2024. Partial current-day voting is excluded. Day controls select cumulative periods; Ellis publishes a cumulative workbook without per-voter dates, so earlier precinct cutoffs remain unavailable.
 
