@@ -264,6 +264,8 @@ Georgia/NC/Nevada combined counts use their paired mail and early in-person comp
 
 GitHub Actions is scheduled once an hour at minute17 UTC; actual starts may be delayed by GitHub. Browser data reloads/publication checks and the local Rust default collector interval are hourly. Manual Check updates checks the current publication immediately. Local manual source refresh polls only until that explicitly requested job completes.
 
+If a Pages deployment removes an artifact still referenced by an open tab, the browser checks the publication once, resolves the original selection against the new manifest, and reloads the current view with its filters preserved. Concurrent misses share recovery. An unchanged publication or genuinely missing replacement still reports an error; this recovery does not change the hourly source schedule.
+
 `texas-turnout statewide [--through YYYY-MM-DD] [--offline]` refreshes only county aggregates or rebuilds them from retained native caches. `build_statewide.py --through ... [--offline]` delegates to that canonical Rust implementation. Cached schema1 in-person-only files cannot masquerade as combined turnout; retained native bytes migrate to schema2 or historical sources are fetched again.
 
 ### Texas adversarial verification
@@ -274,7 +276,10 @@ The audit independently reconstructs publisher controls, tests missing reports a
 cargo test --manifest-path dashboard/Cargo.toml --test texas_matching_stress
 TURNOUT_TEST_URL=http://127.0.0.1:8743 python3 dashboard/tests/texas_matching_stress.py
 TURNOUT_TEST_URL=http://127.0.0.1:8743 uv run --with playwright --with pillow python dashboard/tests/texas_visual_stress.py
+TURNOUT_PAGES_URL=http://127.0.0.1:8745/site/ uv run --with playwright python dashboard/tests/pages_rollover.py
 ```
+
+For the rollover browser check, set `TURNOUT_PAGES_URL` to a generated static site or the published dashboard. Add `TURNOUT_ROLLOVER_STATUS=410` to exercise deleted artifacts, and `TURNOUT_PAGES_USE_SERVED_ADAPTER=1` to verify the deployed adapter instead of routing the local source.
 
 Source reconstruction requires the retained publisher evidence used by the audit. Reproducible findings and source qualifications: [Texas source audit](../sources/texas-stress/source-findings.md). Native response bytes and anonymous source counts are preserved; unsupported values are never replaced by a maximum, carried forward, or allocated to precincts.
 
