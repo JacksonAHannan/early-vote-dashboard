@@ -9,7 +9,7 @@ on:
         default: true
         type: boolean
   schedule:
-    - cron: '17,47 * * * *'
+    - cron: '17 * * * *'
   push:
     branches: [main]
     paths:
