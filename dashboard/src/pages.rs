@@ -81,6 +81,20 @@ fn read<T: serde::de::DeserializeOwned>(root: &Path, name: &str) -> Result<T> {
     )?)
 }
 
+fn publish_texas_maps<'a>(
+    root: &Path,
+    counties: impl IntoIterator<Item = &'a str>,
+    publisher: &mut Publisher<'_>,
+) -> Result<()> {
+    for county in counties {
+        let path = format!("data/maps/{county}.geojson");
+        let value: Value = read(root, &path)
+            .with_context(|| format!("Required Texas precinct map unavailable for {county}"))?;
+        publisher.route(&format!("/api/map/{county}"), &[], &value)?;
+    }
+    Ok(())
+}
+
 /// Shared with the live endpoint: preserve its maximum date-specific matched precinct scope.
 pub fn qualified_statewide(root: &Path, snapshot: &Snapshot) -> Result<statewide::Data> {
     let raw = read(root, "data/statewide.json")?;
@@ -153,6 +167,13 @@ pub fn build(root: &Path, out: &Path) -> Result<Summary> {
     let raw: Snapshot = read(root, "data/latest.json")?;
     let snapshot = quality::qualify(root, &raw)?;
     ensure!(snapshot.days > 0, "No observed Texas data");
+    // Every county exposed by the precinct UI must retain its geometry on Pages.
+    // Fail before producing the expensive analyses when a bootstrap omits maps.
+    publish_texas_maps(
+        root,
+        snapshot.counties.iter().map(|county| county.id.as_str()),
+        &mut p,
+    )?;
     let mut data = serde_json::to_value(&snapshot)?;
     data["regressions"] = serde_json::to_value(regression::summaries(&snapshot))?;
     p.route("/api/data", &[], &data)?;
@@ -271,13 +292,6 @@ pub fn build(root: &Path, out: &Path) -> Result<Summary> {
                     &county_buckets::analyze(&statewide, &county_reference, view, metric, day)?,
                 )?;
             }
-        }
-    }
-    for county in &snapshot.counties {
-        let path = format!("data/maps/{}.geojson", county.id);
-        if root.join(&path).exists() {
-            let value: Value = read(root, &path)?;
-            p.route(&format!("/api/map/{}", county.id), &[], &value)?;
         }
     }
     p.route("/api/states", &[], &interstate::catalog(root))?;
@@ -515,6 +529,77 @@ mod tests {
         publisher.store(&value).unwrap();
         assert_eq!(publisher.bytes, bytes);
         assert_eq!(publisher.artifacts, 1);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn every_supported_texas_county_requires_its_map() {
+        use std::io::Read;
+        let dir = std::env::temp_dir().join(format!(
+            "turnout-pages-map-unit-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap()
+        ));
+        std::fs::create_dir_all(dir.join("data/maps")).unwrap();
+        std::fs::create_dir_all(dir.join("api-data")).unwrap();
+        let map = json!({"type":"FeatureCollection","features":[],"county":"tarrant"});
+        std::fs::write(
+            dir.join("data/maps/tarrant.geojson"),
+            serde_json::to_vec(&map).unwrap(),
+        )
+        .unwrap();
+        let mut publisher = Publisher {
+            out: &dir,
+            routes: BTreeMap::new(),
+            states: BTreeMap::new(),
+            precincts: BTreeMap::new(),
+            artifacts: 0,
+            bytes: 0,
+            seen: BTreeSet::new(),
+        };
+        // Exercise the public export boundary: absent geometry aborts before
+        // unrelated analytical inputs are needed or a manifest is published.
+        let snapshot = json!({"schema_version":1,"generated_at":"test","through":"2026-10-19","days":1,"geography":"test","counties":[{"id":"travis","name":"Travis","status":"unavailable","checked_at":"","error":null,"periods":[],"sources":[]}]});
+        let references = json!([{"id":"travis","name":"Travis","state_id":227,"groups":[],"exact_pairs":[],"presidential":{},"references":{}}]);
+        std::fs::write(
+            dir.join("data/latest.json"),
+            serde_json::to_vec(&snapshot).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("data/reference.json"),
+            serde_json::to_vec(&references).unwrap(),
+        )
+        .unwrap();
+        let error = build(&dir, &dir.join("site")).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Required Texas precinct map unavailable for travis")
+        );
+        assert!(!dir.join("site/api-manifest.json").exists());
+        let error = publish_texas_maps(&dir, ["tarrant", "travis"], &mut publisher).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Required Texas precinct map unavailable for travis")
+        );
+        assert!(!publisher.routes.contains_key("/api/map/travis"));
+        assert!(!dir.join("api-manifest.json").exists());
+        std::fs::write(
+            dir.join("data/maps/travis.geojson"),
+            br#"{"type":"FeatureCollection","features":[],"county":"travis"}"#,
+        )
+        .unwrap();
+        publish_texas_maps(&dir, ["tarrant", "travis"], &mut publisher).unwrap();
+        assert_eq!(publisher.routes.len(), 2);
+        assert!(publisher.routes.contains_key("/api/map/travis"));
+        let mut decoded = String::new();
+        flate2::read::GzDecoder::new(
+            std::fs::File::open(dir.join(&publisher.routes["/api/map/tarrant"])).unwrap(),
+        )
+        .read_to_string(&mut decoded)
+        .unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&decoded).unwrap(), map);
         std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]

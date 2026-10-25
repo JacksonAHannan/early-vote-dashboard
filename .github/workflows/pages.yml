@@ -63,9 +63,9 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: .turnout-state/aggregate-state.tar.gz
-          key: turnout-aggregates-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          key: turnout-aggregates-v2-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            turnout-aggregates-v1-
+            turnout-aggregates-v2-
 
       - name: Restore retained aggregate state
         env:
@@ -144,7 +144,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: .turnout-state/aggregate-state.tar.gz
-          key: turnout-aggregates-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          key: turnout-aggregates-v2-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload retained aggregate state
         uses: actions/upload-artifact@v7

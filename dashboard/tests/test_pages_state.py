@@ -21,6 +21,9 @@ class PagesStateTests(unittest.TestCase):
         self.root = self.directory / "project"
         for path in state.REQUIRED:
             self.put(path, {"county": "Example", "votes": 100, "sources": [{"url": "https://example.org/data", "sha256": "abc"}]})
+        self.put("dashboard/data/reference.json", [{"id": "example", "name": "Example"}])
+        self.map_path = "dashboard/data/maps/example.geojson"
+        self.put(self.map_path, {"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"precinct": "P1"}, "geometry": {"type": "Point", "coordinates": [-97.5, 32.5]}}]})
         self.archive = self.directory / "aggregate-state.tar.gz"
 
     def put(self, path, document):
@@ -53,17 +56,48 @@ class PagesStateTests(unittest.TestCase):
         result = state.package(self.root, self.archive)
         target = self.directory / "restored"
         restored = state.restore(target, self.archive)
-        self.assertEqual(restored["restored_files"], len(state.REQUIRED) + len(extras))
+        self.assertEqual(restored["restored_files"], len(state.REQUIRED) + len(extras) + 1)
         self.assertEqual(result["uncompressed_bytes"], restored["uncompressed_bytes"])
         self.assertTrue(Path(result["manifest"]).is_file())
-        for path in state.REQUIRED | set(extras):
+        for path in state.REQUIRED | set(extras) | {self.map_path}:
             self.assertEqual((self.root / path).read_bytes(), (target / path).read_bytes())
 
     def test_logs_snapshots_credentials_and_raw_downloads_are_excluded(self):
         for path in ["dashboard/data/private.log", "dashboard/data/server.pid", "dashboard/data/snapshots/old.json", "dashboard/data/original-hashes.json", "sources/multistate/ga/raw/credentials.json", "sources/multistate/nc/raw-voters.json"]:
             self.put(path, {"voter_id": "DO NOT PUBLISH"})
         state.package(self.root, self.archive)
-        self.assertEqual(set(state.inspect_archive(self.archive)), state.REQUIRED)
+        self.assertEqual(set(state.inspect_archive(self.archive)), state.REQUIRED | {self.map_path})
+
+    def test_geojson_allowed_only_in_the_maps_tree(self):
+        for path in ["dashboard/data/states/private.geojson", "dashboard/data/cache/private.geojson", "sources/multistate/va/precincts/private.geojson"]:
+            self.assertFalse(state.allowed(path))
+            self.put(path, {"voter_id": "private"})
+        state.package(self.root, self.archive)
+        records = state.inspect_archive(self.archive)
+        self.assertIn(self.map_path, records)
+        self.assertFalse(any("private.geojson" in path for path in records))
+
+    def test_missing_reference_county_map_rejects_packaging(self):
+        (self.root / self.map_path).unlink()
+        with self.assertRaisesRegex(ValueError, "Missing required county maps"):
+            state.package(self.root, self.archive)
+
+    def test_legacy_archive_without_geojson_is_rejected_before_restoring(self):
+        state.package(self.root, self.archive)
+        def remove_maps(members):
+            output = []
+            for member, data in members:
+                if member.name.endswith(".geojson"):
+                    continue
+                if member.name == state.MANIFEST:
+                    manifest = json.loads(data)
+                    manifest["files"] = [record for record in manifest["files"] if not record["path"].endswith(".geojson")]
+                    manifest["total_bytes"] = sum(record["bytes"] for record in manifest["files"])
+                    data = json.dumps(manifest).encode()
+                output.append((member, data))
+            return output
+        self.rewrite(remove_maps)
+        self.assert_rejected_without_writes()
 
     def test_sensitive_fields_are_rejected_recursively_and_normalized(self):
         for key in ["VUID", "ncid", "Voter_ID", "first_name", "last-name", "DOB", "Date Of Birth", "SSN", "Email", "phone", "street_address", "access_token", "api_key"]:

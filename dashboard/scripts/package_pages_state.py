@@ -50,7 +50,7 @@ def allowed(path):
     parts = PurePosixPath(path)
     if parts.is_absolute() or str(parts) != path or any(p in (".", "..") for p in parts.parts):
         return False
-    return path in EXACT or (path.endswith(".json") and any(path.startswith(prefix) for prefix in TREES))
+    return path in EXACT or (path.endswith(".json") and any(path.startswith(prefix) for prefix in TREES)) or (path.startswith("dashboard/data/maps/") and path.endswith(".geojson"))
 
 
 def validate_json(data, path):
@@ -71,6 +71,22 @@ def validate_json(data, path):
                 pending.append(item)
         elif isinstance(value, list):
             pending.extend(value)
+    return document
+
+
+def required_maps(reference):
+    """Every supported Texas reference county must retain its linked geometry."""
+    if not isinstance(reference, list) or not reference:
+        raise ValueError("Texas county reference must be a nonempty list")
+    counties = []
+    for county in reference:
+        county_id = county.get("id") if isinstance(county, dict) else None
+        if not isinstance(county_id, str) or not re.fullmatch(r"[a-z0-9_-]+", county_id):
+            raise ValueError("Invalid Texas reference county identifier")
+        counties.append(county_id)
+    if len(set(counties)) != len(counties):
+        raise ValueError("Duplicate Texas reference county identifier")
+    return {f"dashboard/data/maps/{county}.geojson" for county in counties}
 
 
 def file_record(path, data):
@@ -95,9 +111,14 @@ def source_paths(root):
     paths = {path for path in EXACT if (root / path).is_file()}
     for prefix in TREES:
         paths.update(path.relative_to(root).as_posix() for path in (root / prefix).rglob("*.json") if path.is_file())
+    paths.update(path.relative_to(root).as_posix() for path in (root / "dashboard/data/maps").rglob("*.geojson") if path.is_file())
     missing = REQUIRED - paths
     if missing:
         raise ValueError(f"Missing required aggregate files: {', '.join(sorted(missing))}")
+    reference = validate_json((root / "dashboard/data/reference.json").read_bytes(), "dashboard/data/reference.json")
+    missing_maps = required_maps(reference) - paths
+    if missing_maps:
+        raise ValueError(f"Missing required county maps: {', '.join(sorted(missing_maps))}")
     if len(paths) > MAX_FILES:
         raise ValueError("Too many aggregate files")
     return sorted(paths)
@@ -143,7 +164,7 @@ def package(root, output):
 
 def inspect_archive(source):
     """Read and validate every member before allowing any destination changes."""
-    observed, seen, manifest, total = {}, set(), None, 0
+    observed, seen, manifest, total, reference = {}, set(), None, 0, None
     with tarfile.open(source, mode="r:gz") as archive:
         for member in archive:
             path = member.name
@@ -164,7 +185,9 @@ def inspect_archive(source):
                 except (UnicodeError, json.JSONDecodeError) as error:
                     raise ValueError("Invalid aggregate manifest") from error
             else:
-                validate_json(data, path)
+                document = validate_json(data, path)
+                if path == "dashboard/data/reference.json":
+                    reference = document
                 observed[path] = file_record(path, data)
     if not isinstance(manifest, dict) or manifest.get("version") != 1 or not isinstance(manifest.get("files"), list):
         raise ValueError("Missing or unsupported aggregate manifest")
@@ -175,6 +198,8 @@ def inspect_archive(source):
         expected[record["path"]] = record
     if expected != observed or not REQUIRED.issubset(expected):
         raise ValueError("Aggregate manifest paths, hashes or sizes do not match archive")
+    if required_maps(reference) - expected.keys():
+        raise ValueError("Archive is missing required county maps from the Texas reference")
     if manifest.get("total_bytes") != sum(record["bytes"] for record in observed.values()):
         raise ValueError("Aggregate manifest total does not match archive")
     return observed
