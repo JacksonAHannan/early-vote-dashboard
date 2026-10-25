@@ -20,6 +20,7 @@ import socket
 import ssl
 import struct
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -47,6 +48,21 @@ def encode(value):
     return json.dumps(value, ensure_ascii=False, separators=(',', ':')).encode()
 
 
+def request_bytes(url, description, headers=None):
+    """Identify a failed public boundary without logging query/session credentials."""
+    request = urllib.request.Request(url, headers=headers or {})
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return response.read()
+    except urllib.error.HTTPError as error:
+        parsed = urllib.parse.urlsplit(url)
+        host = parsed.hostname or ''
+        if parsed.port:
+            host += f':{parsed.port}'
+        endpoint = urllib.parse.urlunsplit((parsed.scheme, host, parsed.path, '', ''))
+        raise RuntimeError(f'{description}: HTTP {error.code} at {endpoint}') from None
+
+
 class Archive:
     def __init__(self):
         self.sources = []
@@ -62,9 +78,7 @@ class Archive:
                                  path=str(path.relative_to(ROOT)), **details))
 
     def get(self, url, description, suffix='json'):
-        request = urllib.request.Request(url, headers={'User-Agent': 'TurnoutResearch/1.0'})
-        with urllib.request.urlopen(request, timeout=60) as response:
-            content = response.read()
+        content = request_bytes(url, description, {'User-Agent': 'TurnoutResearch/1.0'})
         self.save(url, content, description, suffix)
         return content
 
@@ -347,8 +361,8 @@ def collect(through, skip_demographics=False):
     variables = archive.get(HUB + APP_PATH + '/js/vars.js', 'SOS public unofficial turnout app configuration', 'js').decode()
     tenant = re.search(r'var tenant\s*=\s*"([^"]+)"', config)[1]
     app_id = re.search(r'var appId\s*=\s*"([^"]+)"', variables)[1]
-    with urllib.request.urlopen(HUB + '/qlik-oauth-create-user', timeout=60) as response:
-        token = json.load(response)['access_token']
+    token = json.loads(request_bytes(HUB + '/qlik-oauth-create-user',
+                                     'SOS anonymous read session'))['access_token']
     ws = QlikSocket(tenant.replace('https://', 'wss://') + '/app/' + app_id, token)
     observations = []
     try:

@@ -2,8 +2,11 @@
 import collections
 import importlib.util
 import json
+import io
 from pathlib import Path
 import unittest
+from unittest.mock import patch
+from urllib.error import HTTPError
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location('georgia', ROOT / 'dashboard/scripts/states/georgia.py')
@@ -39,6 +42,37 @@ class GeorgiaTests(unittest.TestCase):
         self.assertEqual(lookup['13001', '2026-10-14', 'total', 'cumulative']['votes'], 36)
         self.assertEqual(lookup['13003', '2026-10-14', 'total', 'daily']['breakdowns']['race']['White'], 0)
         self.assertTrue(all(row['date'] <= '2026-10-14' for row in result))
+
+    def test_archived_http_failure_identifies_boundary_without_query_credentials(self):
+        url = ga.HUB + '/shared-config.js?access_token=fixture-private-value'
+        failure = HTTPError(url, 403, 'Forbidden', {}, io.BytesIO())
+        with patch.object(ga.urllib.request, 'urlopen', side_effect=failure), patch.object(ga.Archive, 'save') as save:
+            with self.assertRaises(RuntimeError) as raised:
+                ga.Archive().get(url, 'SOS host configuration', 'js')
+        message = str(raised.exception)
+        self.assertIn('SOS host configuration', message)
+        self.assertIn('HTTP 403', message)
+        self.assertIn(ga.HUB + '/shared-config.js', message)
+        self.assertNotIn('fixture-private-value', message)
+        self.assertNotIn('access_token', message)
+        save.assert_not_called()
+
+    def test_public_session_http_failure_identifies_the_actual_collect_boundary(self):
+        failure = HTTPError(ga.HUB + '/qlik-oauth-create-user', 403, 'Forbidden', {}, io.BytesIO())
+        configuration = [b'var tenant = "https://example.qlikcloud.com";', b'var appId = "fixture-app";']
+        with patch.object(ga.Archive, 'get', side_effect=configuration), patch.object(ga.urllib.request, 'urlopen', side_effect=failure):
+            with self.assertRaisesRegex(RuntimeError, 'SOS anonymous read session.*HTTP 403.*qlik-oauth-create-user'):
+                ga.collect('2026-10-23')
+
+    def test_public_session_credentials_are_passed_only_in_memory(self):
+        configuration = [b'var tenant = "https://example.qlikcloud.com";', b'var appId = "fixture-app";']
+        token = 'fixture-private-session'
+        body = io.BytesIO(json.dumps({'access_token': token}).encode())
+        with patch.object(ga.Archive, 'get', side_effect=configuration), patch.object(ga.Archive, 'save') as save, patch.object(ga.urllib.request, 'urlopen', return_value=body), patch.object(ga, 'QlikSocket', side_effect=InterruptedError('stop after credential handoff')) as connect:
+            with self.assertRaisesRegex(InterruptedError, 'stop after credential handoff'):
+                ga.collect('2026-10-23')
+        connect.assert_called_once_with('wss://example.qlikcloud.com/app/fixture-app', token)
+        save.assert_not_called()
 
     def test_invalid_and_fractional_counts_are_rejected(self):
         for count in [-1, 0.5, float('nan'), '100']:
