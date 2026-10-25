@@ -8,9 +8,9 @@
  const labels={partisan:'Partisanship',demographic:'County demographics',party:'Party registration',race:'Voter race',age:'Voter age',sex:'Voter sex',ethnicity:'Voter ethnicity',white_nonwhite:'Voter white/non-white'};
  const nativeDemographics=['race','age','sex'];
  const statewideDemographics=()=>app.id==='ga'&&nativeDemographics.includes(app.classification);
- const methodNames={in_person:'In person',mail:'Mail',total:'All early ballots'};
+ const methodNames={in_person:'In person',mail:'Mail',total:'Mail + in person'};
  const nameOf={ga:'Georgia',nc:'North Carolina',va:'Virginia',nv:'Nevada',tx:'Texas'};
- const app=window.States={id:'tx',view:null,request:0,busy:false,classification:'partisan',metric:'non_white_vap',method:'in_person',measure:'cumulative',date:'',county:null,map:null,layer:null,geometry:{},downloads:new Map(),sort:'new',descending:true,fullRange:false,regressionWinner:'all',regression:null,bucketPage:0};
+ const app=window.States={id:'tx',view:null,request:0,busy:false,classification:'partisan',metric:'non_white_vap',method:'total',measure:'cumulative',date:'',county:null,map:null,layer:null,geometry:{},downloads:new Map(),sort:'new',descending:true,fullRange:false,regressionWinner:'all',regression:null,bucketPage:0};
  function tools(key,csv=true){return `<div>${csv?`<a class="download" data-state-csv="${key}" aria-label="Export ${key} CSV">CSV ↓</a>`:''}<button type="button" class="state-png" data-state-image="${key}" aria-label="Export ${key} as PNG">PNG ↓</button><button type="button" class="state-panel-toggle" data-state-collapse="${key}" aria-expanded="true" aria-label="Collapse ${key}">Collapse</button></div>`;}
  function panel(key,title,content,csv=true){return `<section class="state-panel" id="state-panel-${key}"><div class="section-heading"><h2>${title}</h2>${tools(key,csv)}</div><div class="state-panel-body" id="state-body-${key}">${content}</div></section>`;}
  function init(){
@@ -33,10 +33,10 @@
   });
   window.addEventListener('resize',()=>{if(app.id!=='tx'&&app.view&&!app.busy){renderCharts();if(app.map&&el('state-map').clientWidth>80&&el('state-map').clientHeight>80){app.map.invalidateSize({pan:true,animate:false});if(app.layer&&!app.mapZoomed)app.map.fitBounds(app.layer.getBounds(),{padding:[12,12],animate:false});}}});
   window.addEventListener('hashchange',readHash);readHash();
-  setInterval(()=>{if(app.id!=='tx'&&!app.busy)load(false);},60000);
+  setInterval(()=>{if(app.id!=='tx'&&!app.busy)load(false);},3600000);
  }
  function writeHash(){if(app.id==='tx')return;const q=new URLSearchParams({state:app.id,method:app.method,view:app.classification,metric:app.metric,measure:app.measure});if(app.date)q.set('date',app.date);history.replaceState(null,'','#'+q);}
- function readHash(){const q=new URLSearchParams(location.hash.slice(1)),id=q.get('state');if(id&&nameOf[id]&&id!=='tx'){app.method=q.get('method')||'in_person';app.classification=q.get('view')||(id==='ga'?'race':'partisan');app.metric=q.get('metric')||'non_white_vap';app.measure=q.get('measure')==='daily'?'daily':'cumulative';switchState(id,false,q.get('date')||'');}else if(app.id!=='tx')switchState('tx',false);}
+ function readHash(){const q=new URLSearchParams(location.hash.slice(1)),id=q.get('state');if(id&&nameOf[id]&&id!=='tx'){app.method=q.get('method')||'total';app.classification=q.get('view')||(id==='ga'?'race':'partisan');app.metric=q.get('metric')||'non_white_vap';app.measure=q.get('measure')==='daily'?'daily':'cumulative';switchState(id,false,q.get('date')||'');}else if(app.id!=='tx')switchState('tx',false);}
  function switchState(id,write=true,date=''){
   app.request++;if(id==='ga'&&write)app.classification='race';app.id=id;app.view=null;app.county=null;app.date=date;app.bucketPage=0;app.mapZoomed=false;app.mapState=null;app.map?.stop();if(id!=='tx')Atlas.map?.stop();app.layer?.remove();app.layer=null;el('state-summary').innerHTML='';for(const target of ['state-turnout-chart','state-buckets','state-scatter','state-county-profile','state-county-chart'])el(target).innerHTML='<div class="state-empty">Loading…</div>';el('states-workspace').querySelectorAll('tbody').forEach(body=>body.innerHTML='');el('state-select').value=id;
   el('texas-dashboard').hidden=id!=='tx';el('states-workspace').hidden=id==='tx';el('period').hidden=id!=='tx';el('state-period').hidden=id==='tx';el('sync').hidden=id!=='tx';
@@ -54,7 +54,7 @@
    const response=await fetch(`/api/states/${id}?${q}`,{cache:'no-store'}),view=await response.json();if(!response.ok)throw Error(view.error||`HTTP ${response.status}`);
    if(token!==app.request||id!==app.id)return;
    app.view=view;app.date=view.date;
-   if(!view.methods.includes(app.method)){app.method=view.methods[0]||'in_person';return load(write);}
+   if(!view.methods.includes(app.method)){app.method=view.methods.includes('total')?'total':view.methods[0]||'total';return load(write);}
    if(!['partisan','demographic',...view.breakdowns].includes(app.classification)){app.classification='partisan';return load(write);}
    app.busy=false;render();if(write)writeHash();
    try{if(!app.geometry[id]){const r=await fetch(`/api/states/${id}/map`);if(!r.ok)throw Error('County map unavailable');app.geometry[id]=await r.json();}if(token===app.request&&id===app.id){renderMap();el('states-workspace').querySelector('[data-state-image="map"]').disabled=false;}}catch(error){if(token===app.request)el('state-map-legend').textContent=error.message;}
@@ -68,7 +68,7 @@
   const v=app.view;if(!v||app.id==='tx')return;
   const p=pointAt(v.series),count=p?.[app.measure+'_members']?.length||0;
   el('state-period').textContent=`${app.date} / ${p?.date_2024||'—'}`;el('state-status').textContent='';
-  el('state-method').innerHTML=v.methods.map(m=>`<option value="${m}">${safe(v.method_labels?.[m]||methodNames[m]||m)}</option>`).join('');el('state-method').value=app.method;
+  el('state-method').innerHTML=['total','in_person','mail'].filter(m=>v.methods.includes(m)).map(m=>`<option value="${m}">${safe(v.method_labels?.[m]||methodNames[m]||m)}</option>`).join('');el('state-method').value=app.method;
   const classifications=app.id==='ga'?[...nativeDemographics.filter(k=>v.breakdowns.includes(k)),'partisan','demographic']:['partisan','demographic',...v.breakdowns];
   el('state-classification').innerHTML=classifications.filter(k=>labels[k]).map(k=>`<option value="${k}">${safe(app.id==='ga'&&nativeDemographics.includes(k)?'Statewide '+labels[k].toLowerCase():labels[k])}</option>`).join('');el('state-classification').value=app.classification;
   const headline=statewideDemographics(),bucketPanel=el('state-panel-buckets'),turnoutPanel=el('state-panel-turnout');if(headline)turnoutPanel.before(bucketPanel);else turnoutPanel.after(bucketPanel);
@@ -155,7 +155,7 @@
   catch(error){if(key===precinctKey())el('state-precinct-count').textContent=error.message;}
   finally{if(app.precinctPending===key)app.precinctPending=null;}
  }
- function precinctTable(){const result=app.precinctView;if(!result||app.precinctKey!==precinctKey())return;const search=el('state-precinct-search').value.toLowerCase(),rows=result.rows.filter(p=>p.precinct.toLowerCase().includes(search)).sort((a,b)=>b.votes-a.votes||a.precinct.localeCompare(b.precinct));el('state-panel-precincts').querySelector('h2').textContent=title('precincts');el('state-precinct-count').textContent=`${rows.length} / ${result.rows.length}${!result.rows.length&&result.latest_reported?' · Latest '+result.latest_reported:''}`;el('state-precinct-table').querySelector('tbody').innerHTML=rows.map(p=>`<tr><td>${safe(p.precinct)}</td><td>${num(p.votes)}</td></tr>`).join('')||'<tr><td colspan="2">No reported precinct observations</td></tr>';}
+ function precinctTable(){const result=app.precinctView;if(!result||app.precinctKey!==precinctKey())return;const search=el('state-precinct-search').value.toLowerCase(),rows=result.rows.filter(p=>p.precinct.toLowerCase().includes(search)).sort((a,b)=>b.votes-a.votes||a.precinct.localeCompare(b.precinct));el('state-panel-precincts').querySelector('h2').textContent=title('precincts');el('state-precinct-count').textContent=`${rows.length} / ${result.rows.length}${!result.rows.length&&result.latest_reported?' · Latest '+result.latest_reported:''}`;el('state-precinct-table').querySelector('tbody').innerHTML=rows.map(p=>`<tr><td>${safe(p.precinct)}</td><td>${num(p.votes)}</td></tr>`).join('')||`<tr><td colspan="2">No reported ${safe(methodNames[result.method]||result.method).toLowerCase()} precinct observations</td></tr>`;}
  function table(){
   const v=app.view;if(!v||app.busy)return;const search=el('state-search').value.toLowerCase(),rows=v.counties.filter(c=>c.name.toLowerCase().includes(search));
   const x=c=>app.classification==='demographic'?c.demographics?.[app.metric]:c.harris_share;

@@ -101,6 +101,7 @@ pub struct Coverage {
 
 #[derive(Debug, Serialize)]
 pub struct View {
+    pub voting_method: String,
     pub schema_version: u32,
     pub generated_at: String,
     pub through: String,
@@ -347,7 +348,7 @@ pub fn analyze(
     day: u32,
 ) -> Result<View> {
     ensure!(
-        statewide.schema_version == 1,
+        matches!(statewide.schema_version, 1 | 2),
         "unsupported statewide schema"
     );
     ensure!(
@@ -468,6 +469,7 @@ pub fn analyze(
     coverage.groups = totals.groups;
     coverage.cumulative_groups = totals.cumulative_groups;
     Ok(View {
+        voting_method: statewide.voting_method.clone(),
         schema_version: 1,
         generated_at: statewide.generated_at.clone(),
         through: statewide.through.to_string(),
@@ -481,7 +483,10 @@ pub fn analyze(
         totals,
         counties,
         coverage,
-        method: "County-level descriptive comparisons of official aggregate in-person turnout. Each county is classified once using its own 2024 presidential two-party margin or Census population share; counties are never assigned a precinct classification. Every date and measure uses all counties with available values in both cycles on that date; an omission on another date does not remove a county. Each observation includes its own county membership and count. Historical future dates use available historical counties; future 2026 dates and missing values remain null. Cumulative series sum native cumulative reports and are never reconstructed from daily reports. Bucket ratios compare summed turnout, never average county ratios. Selected-day county rows preserve official reports and identify that date’s matched membership. Demographic associations describe places, not the demographics of individual voters.".into(),
+        method: format!(
+            "County-level descriptive comparisons of official aggregate {} turnout. Each county is classified once using its own 2024 presidential two-party margin or Census population share; counties are never assigned a precinct classification. Every date and measure uses all counties with available values in both cycles on that date; an omission on another date does not remove a county. Each observation includes its own county membership and count. Historical future dates use available historical counties; future 2026 dates and missing values remain null. Cumulative series sum native cumulative reports and are never reconstructed from daily reports. Bucket ratios compare summed turnout, never average county ratios. Selected-day county rows preserve official reports and identify that date’s matched membership. Demographic associations describe places, not the demographics of individual voters.",
+            statewide::method_label(&statewide.voting_method)
+        ),
         reference_method: reference.method.clone(),
         reference_sources: reference.sources.clone(),
         turnout_sources: statewide.sources.clone(),
@@ -529,6 +534,7 @@ mod tests {
                 state_id: i as u32 + 1,
                 days: (1..=12)
                     .map(|day| statewide::Day {
+                        by_method: BTreeMap::new(),
                         coverage: serde_json::Value::Null,
                         day,
                         date_2024: crate::start(2024) + chrono::Duration::days(i64::from(day - 1)),
@@ -549,6 +555,7 @@ mod tests {
             .collect();
         (
             statewide::Data {
+                voting_method: "in_person".into(),
                 schema_version: 1,
                 generated_at: "test".into(),
                 through: crate::start(2026) + chrono::Duration::days(1),

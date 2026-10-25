@@ -20,11 +20,11 @@ const Navigation=window.Navigation={
  }
 };
 const CountyView=window.CountyView={
- mode:'partisan',metricId:'hispanic_vap',measure:'daily',bucket:null,view:null,key:'',pending:'',download:null,
+ votingMethod:'total',mode:'partisan',metricId:'hispanic_vap',measure:'daily',bucket:null,view:null,key:'',pending:'',download:null,
  metric(){return census?.metrics.find(m=>m.id===this.metricId);},
  label(){const m=this.metric();return this.mode==='partisan'?'2024 presidential margin':`${m?.label||'Demographic'}${m?.denominator==='vap'?' age 18+':''}`;},
  color(i){return this.mode==='partisan'?['#285b91','#4d80b4','#6e9cc7','#d18a7d','#be6658','#a84236'][i]:'#137b8a';},
- signature(){return data?`${data.generated_at}|${day}|${this.mode}|${this.metricId}`:'';},
+ signature(){return data?`${data.generated_at}|${day}|${this.mode}|${this.metricId}|${this.votingMethod}`:'';},
  ready(){return this.view&&this.key===this.signature()&&(!this.pending||this.pending===this.key);},
  async update(){
   if(!data)return;
@@ -35,7 +35,7 @@ const CountyView=window.CountyView={
   if(this.key===key&&this.view){this.render();return;}if(this.pending===key)return;
   this.pending=key;this.view=null;downloadReady('county-bucket-download',false);$('county-daily-charts').innerHTML='<div class="empty">Loading matched comparisons…</div>';$('county-bucket-summary').innerHTML='';$('county-bucket-coverage').textContent='';$('county-summary-cutoff').textContent='';Tracking.clearState();window.Visuals?.sync();$('county-workspace').setAttribute('aria-busy','true');$('county-error').hidden=true;
   try{
-   const response=await fetch('/api/county-buckets?'+new URLSearchParams({view:this.mode,metric:this.mode==='partisan'?'presidential_margin':this.metricId,day})),value=await response.json();
+   const response=await fetch('/api/county-buckets?'+new URLSearchParams({view:this.mode,metric:this.mode==='partisan'?'presidential_margin':this.metricId,day,method:this.votingMethod})),value=await response.json();
    if(!response.ok)throw Error(value.error||'County buckets unavailable');if(this.pending!==key)return;
    this.view=value;this.key=key;this.render();
   }catch(error){if(this.pending===key){$('county-error').textContent=error.message;$('county-error').hidden=false;}}
@@ -70,12 +70,13 @@ const CountyView=window.CountyView={
    return `<button type="button" class="county-summary-bucket${this.bucket===i?' bucket-active':''}" data-county-bucket="${i}" aria-pressed="${this.bucket===i}" aria-label="${esc(b.label)}, ${b.cumulative_groups} counties, 2026 ${vote(newVotes)} votes, 2024 ${vote(old)} votes, ${ratio} of 2024"><div class="bucket-summary-heading"><span><i style="background:${color}"></i>${esc(b.label)}</span><b>${ratio}</b></div><div class="bucket-bar-old" style="width:${(old??0)/max*100}%"></div><div class="bucket-bar-new" style="width:${(newVotes??0)/max*100}%;background:${color}"></div><div class="bucket-summary-votes"><span>2024 <strong>${vote(old)}</strong></span><span>2026 <strong>${vote(newVotes)}</strong></span></div><span class="bucket-county-count">${b.cumulative_groups} ${b.cumulative_groups===1?'county':'counties'}</span></button>`;
   }).join('');
   document.querySelectorAll('[data-county-bucket]').forEach(button=>button.onclick=()=>this.selectBucket(+button.dataset.countyBucket));
-  const rows=[['geography','view','metric','bucket','daily_counties','cumulative_counties','day','date_2024','date_2026','daily_2024','daily_2026','cumulative_2024','cumulative_2026','daily_county_ids','cumulative_county_ids']];
-  for(const b of panels)for(const d of Tracking.paired(b.days,false,this.view.observed_days))rows.push(['county',this.mode,this.mode==='partisan'?'presidential_margin':this.metricId,b.label,d.groups??d.daily_groups??b.groups,d.cumulative_groups??b.cumulative_groups,d.day,d.date_2024,d.date_2026,d.daily_2024,d.daily_2026,d.cumulative_2024,d.cumulative_2026,(d.county_ids||[]).join(';'),(d.cumulative_county_ids||[]).join(';')]);
+  const rows=[['geography','view','metric','method','bucket','daily_counties','cumulative_counties','day','date_2024','date_2026','daily_2024','daily_2026','cumulative_2024','cumulative_2026','daily_county_ids','cumulative_county_ids']];
+  for(const b of panels)for(const d of Tracking.paired(b.days,false,this.view.observed_days))rows.push(['county',this.mode,this.mode==='partisan'?'presidential_margin':this.metricId,this.votingMethod,b.label,d.groups??d.daily_groups??b.groups,d.cumulative_groups??b.cumulative_groups,d.day,d.date_2024,d.date_2026,d.daily_2024,d.daily_2026,d.cumulative_2024,d.cumulative_2026,(d.county_ids||[]).join(';'),(d.cumulative_county_ids||[]).join(';')]);
   this.download=csvLink('county-bucket-download',rows,`county-buckets-${this.mode}-${this.mode==='partisan'?'presidential':this.metricId}.csv`,this.download);
   if(Tracking.state)Tracking.renderState();window.Visuals?.sync();
  },
  init(){
+  $('county-method').onchange=e=>{this.votingMethod=e.target.value;this.bucket=null;this.update();if(Tracking.ctx)Tracking.update(Tracking.ctx);};
   $('county-partisan').onclick=()=>{this.mode='partisan';this.bucket=null;this.update();};$('county-demographic').onclick=()=>{this.mode='demographic';this.bucket=null;this.update();};
   $('county-metric').onchange=e=>{this.metricId=e.target.value;this.bucket=null;this.update();};$('county-bucket-measure').onchange=e=>{this.measure=e.target.value;this.render();};$('county-bucket-clear').onclick=()=>{this.bucket=null;this.render();};
  }

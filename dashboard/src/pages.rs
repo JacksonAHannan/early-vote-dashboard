@@ -97,9 +97,20 @@ fn publish_texas_maps<'a>(
 
 /// Shared with the live endpoint: preserve its maximum date-specific matched precinct scope.
 pub fn qualified_statewide(root: &Path, snapshot: &Snapshot) -> Result<statewide::Data> {
-    let raw = read(root, "data/statewide.json")?;
+    qualified_statewide_method(root, snapshot, "total")
+}
+
+pub fn qualified_statewide_method(
+    root: &Path,
+    snapshot: &Snapshot,
+    method: &str,
+) -> Result<statewide::Data> {
+    let raw: statewide::Data = read(root, "data/statewide.json")?;
     let report = quality::Report::load(root).unwrap_or_default();
-    let mut data = report.statewide(raw);
+    let mut data = report.statewide(statewide::select_method(raw.clone(), "in_person")?);
+    if method != "in_person" {
+        return statewide::with_county_in_person(raw, &data, method);
+    }
     let refs: Vec<Reference> = read(root, "data/reference.json")?;
     let history: trends::History = read(root, "data/history.json").unwrap_or_default();
     for county in &mut data.counties {
@@ -194,6 +205,15 @@ pub fn build(root: &Path, out: &Path) -> Result<Summary> {
     let census: demographics::Data = read(root, "data/demographics.json")?;
     let primary: demographics::Data = read(root, "data/primary.json")?;
     let statewide = qualified_statewide(root, &snapshot)?;
+    ensure!(
+        statewide
+            .counties
+            .iter()
+            .any(|c| c.days.iter().any(|d| d.date_2026 <= statewide.through
+                && d.cumulative_2024.is_some()
+                && d.cumulative_2026.is_some())),
+        "Combined county turnout is unavailable; refresh the mail-capable statewide aggregates before publishing"
+    );
     p.route("/api/statewide", &[], &statewide)?;
     let county_reference: county_buckets::Reference = read(root, "data/county-reference.json")?;
     let county_ids: Vec<&str> = std::iter::once("all")
@@ -269,28 +289,33 @@ pub fn build(root: &Path, out: &Path) -> Result<Summary> {
             }
         }
     }
-    for day in 1..=snapshot.days {
-        for (view, metrics) in [
-            ("partisan", vec!["presidential_margin"]),
-            (
-                "demographic",
-                county_reference
-                    .metrics
-                    .iter()
-                    .map(|m| m.id.as_str())
-                    .collect(),
-            ),
-        ] {
-            for metric in metrics {
-                p.route(
-                    "/api/county-buckets",
-                    &[
-                        ("view", view),
-                        ("metric", metric),
-                        ("day", &day.to_string()),
-                    ],
-                    &county_buckets::analyze(&statewide, &county_reference, view, metric, day)?,
-                )?;
+    for voting_method in ["total", "in_person", "mail"] {
+        let statewide = qualified_statewide_method(root, &snapshot, voting_method)?;
+        p.route("/api/statewide", &[("method", voting_method)], &statewide)?;
+        for day in 1..=snapshot.days {
+            for (view, metrics) in [
+                ("partisan", vec!["presidential_margin"]),
+                (
+                    "demographic",
+                    county_reference
+                        .metrics
+                        .iter()
+                        .map(|m| m.id.as_str())
+                        .collect(),
+                ),
+            ] {
+                for metric in metrics {
+                    p.route(
+                        "/api/county-buckets",
+                        &[
+                            ("view", view),
+                            ("metric", metric),
+                            ("day", &day.to_string()),
+                            ("method", voting_method),
+                        ],
+                        &county_buckets::analyze(&statewide, &county_reference, view, metric, day)?,
+                    )?;
+                }
             }
         }
     }

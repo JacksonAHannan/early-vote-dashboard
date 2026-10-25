@@ -221,10 +221,18 @@ pub async fn fetch_state(
             .counties
             .iter()
             .find(|c| c.id == reference.id && c.state_id == reference.state_id)
-        && county
-            .days
-            .iter()
-            .any(|d| d.date_2024 == date && d.votes_2024 == Some(0))
+        && county.days.iter().any(|d| {
+            d.date_2024 == date
+                && d.by_method
+                    .get("in_person")
+                    .map(|v| v.votes_2024)
+                    .unwrap_or_else(|| {
+                        (data.voting_method == "in_person")
+                            .then_some(d.votes_2024)
+                            .flatten()
+                    })
+                    == Some(0)
+        })
         && let Some(source) = data
             .sources
             .iter()

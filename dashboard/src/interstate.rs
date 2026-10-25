@@ -156,16 +156,44 @@ impl<'a> Index<'a> {
         if year == 2026 && date > self.data.through {
             return None;
         }
-        if let Some(r) = self.exact(year, date, county, method, measure) {
-            return Some(r);
-        }
         if method == "total" {
-            let mut a = self.value(year, date, county, "in_person", measure)?;
+            // Native totals can include other categories (Virginia COUNTABLE).
+            // The combined view always uses the same two voting methods.
             let b = self.value(year, date, county, "mail", measure)?;
+            let mut a = self
+                .value(year, date, county, "in_person", measure)
+                .or_else(|| {
+                    let opening = self.data.start_dates.get(&year.to_string())?;
+                    let closing = in_person_end(&self.data.id, year);
+                    if date > closing && measure == "cumulative" {
+                        // After closing, retain a verified final early-vote count;
+                        // an earlier incomplete snapshot cannot stand in for it.
+                        let mut final_count =
+                            self.value(year, closing, county, "in_person", "cumulative")?;
+                        final_count.date = date;
+                        return Some(final_count);
+                    }
+                    if date >= *opening && !(date > closing && measure == "daily") {
+                        return None;
+                    }
+                    // Outside official opening hours, missing daily in-person
+                    // activity is a calendar-established zero, not a missing upload.
+                    let mut zero = b.clone();
+                    zero.votes = 0;
+                    for groups in zero.breakdowns.values_mut() {
+                        for value in groups.values_mut() {
+                            *value = 0;
+                        }
+                    }
+                    Some(zero)
+                })?;
             a.votes = a.votes.checked_add(b.votes)?;
             a.breakdowns = add_breakdowns(&a.breakdowns, &b.breakdowns);
             a.method = "total".into();
             return Some(a);
+        }
+        if let Some(r) = self.exact(year, date, county, method, measure) {
+            return Some(r);
         }
         if measure == "daily" {
             let mut a = self.exact(year, date, county, method, "cumulative")?;
@@ -265,6 +293,23 @@ fn historical_election() -> NaiveDate {
 fn current_election() -> NaiveDate {
     NaiveDate::from_ymd_opt(2026, 11, 3).unwrap()
 }
+fn in_person_end(state: &str, year: i32) -> NaiveDate {
+    let current = NaiveDate::from_ymd_opt(
+        2026,
+        10,
+        if ["nc", "va"].contains(&state) {
+            31
+        } else {
+            30
+        },
+    )
+    .unwrap();
+    if year == 2024 {
+        current + (historical_election() - current_election())
+    } else {
+        current
+    }
+}
 
 struct Scope<'a> {
     members: &'a [String],
@@ -336,7 +381,7 @@ fn series(index: &Index<'_>, dates: &[NaiveDate], scope: Scope<'_>) -> Vec<Day> 
 pub fn view(root: &Path, state: &str, query: &Query) -> Result<Value> {
     let data = load(root, state)?;
     let index = Index::new(&data);
-    let method = query.method.as_deref().unwrap_or("in_person");
+    let method = query.method.as_deref().unwrap_or("total");
     ensure!(
         ["in_person", "mail", "total"].contains(&method),
         "Unknown voting method"
@@ -440,16 +485,7 @@ pub fn view(root: &Path, state: &str, query: &Query) -> Result<Value> {
         "State calendar too long"
     );
     let end = if method == "in_person" {
-        NaiveDate::from_ymd_opt(
-            2026,
-            10,
-            if ["nc", "va"].contains(&state) {
-                31
-            } else {
-                30
-            },
-        )
-        .unwrap()
+        in_person_end(state, 2026)
     } else {
         current_election() - Duration::days(1)
     };
@@ -552,14 +588,24 @@ pub fn view(root: &Path, state: &str, query: &Query) -> Result<Value> {
     if methods.contains("mail") && methods.contains("in_person") {
         methods.insert("total".into());
     }
+    let mut method_labels = data.method_labels.clone();
+    if !method_labels.is_object() {
+        method_labels = json!({});
+    }
+    method_labels["total"] = json!("Mail + in person");
+    let mut notes = data.notes.clone();
+    if state == "va" {
+        notes.retain(|note| !note.starts_with("COUNTABLE is total"));
+        notes.push("Mail + in person sums MAIL_IN and ON_MACHINE. Other native COUNTABLE categories are excluded.".into());
+    }
     let mut result = json!({"id":data.id,"name":data.name,"generated_at":data.generated_at,"through":data.through,"date":selected,
-        "method":method,"method_labels":data.method_labels,"classification":classification,"metric":metric,"methods":methods,"breakdowns":available,
+        "method":method,"method_labels":method_labels,"classification":classification,"metric":metric,"methods":methods,"breakdowns":available,
         "metrics":reference["metrics"],"census_vintage":reference["vintage"],"reference_sources":reference["sources"],
         "alignment":"Same number of days before Election Day; each date and measure matches only counties reported in both cycles.",
         "election_dates":{"2024":historical_election(),"2026":current_election()},"counties":county_rows,"buckets":buckets,
         "series":series(&index,&dates,Scope{members:&selected_members,method,dimension:None}),
         "precinct_available":data.observations.iter().any(|o|o.precinct.is_some())||root.join(format!("../sources/multistate/{state}/precinct-daily.json")).exists(),
-        "sources":data.sources,"errors":data.errors,"notes":data.notes});
+        "sources":data.sources,"errors":data.errors,"notes":notes});
     select_date(&mut result, selected, query.county.as_deref())?;
     Ok(result)
 }
@@ -638,7 +684,7 @@ pub struct PrecinctQuery {
 /// Current-only inspection never implies a cross-cycle precinct correspondence.
 pub fn precincts(root: &Path, state: &str, query: &PrecinctQuery) -> Result<Value> {
     let data = load(root, state)?;
-    let method = query.method.as_deref().unwrap_or("in_person");
+    let method = query.method.as_deref().unwrap_or("total");
     let measure = query.measure.as_deref().unwrap_or("cumulative");
     ensure!(
         ["in_person", "mail", "total"].contains(&method),
@@ -681,7 +727,7 @@ pub fn precincts_from(
 ) -> Result<Value> {
     let state = data.id.as_str();
     let date = query.date.unwrap_or(data.through);
-    let method = query.method.as_deref().unwrap_or("in_person");
+    let method = query.method.as_deref().unwrap_or("total");
     let measure = query.measure.as_deref().unwrap_or("cumulative");
     ensure!(
         ["in_person", "mail", "total"].contains(&method),
@@ -706,40 +752,92 @@ pub fn precincts_from(
                 && r.date <= data.through
         })
         .collect();
-    let native_total = rows.iter().any(|r| r.method == "total");
-    let rows: Vec<_> = rows
-        .into_iter()
-        .filter(|r| {
-            r.method == method
-                || (method == "total"
-                    && !native_total
-                    && ["in_person", "mail"].contains(&r.method.as_str()))
-        })
-        .collect();
-    let latest_reported = rows.iter().map(|r| r.date).max();
-    let has_date = date <= data.through && rows.iter().any(|r| r.date == date);
-    let mut daily = BTreeMap::<String, u64>::new();
-    let mut exact = BTreeMap::<String, u64>::new();
-    for r in rows.iter().filter(|r| has_date && r.date <= date) {
-        let precinct = r.precinct.as_ref().unwrap();
-        if r.measure == "daily" && (measure == "cumulative" || r.date == date) {
-            *daily.entry(precinct.clone()).or_default() += r.votes;
+    let (daily, latest_reported) = if method == "total" {
+        let mail_rows: Vec<_> = rows
+            .iter()
+            .copied()
+            .filter(|r| r.method == "mail")
+            .collect();
+        let early_rows: Vec<_> = rows
+            .iter()
+            .copied()
+            .filter(|r| r.method == "in_person")
+            .collect();
+        let mail = precinct_measure(&mail_rows, date, measure, data.through);
+        let mut early = precinct_measure(&early_rows, date, measure, data.through);
+        let opening = data.start_dates.get("2026").copied();
+        let closing = in_person_end(state, 2026);
+        let final_early = precinct_measure(&early_rows, closing, "cumulative", data.through);
+        if date > closing && measure == "cumulative" && early.is_empty() {
+            early = final_early.clone();
         }
-        if r.measure == measure && r.date == date {
-            *exact.entry(precinct.clone()).or_default() += r.votes;
+        let values = mail
+            .into_iter()
+            .filter_map(|(precinct, votes)| {
+                let early_votes = early.get(&precinct).copied().or_else(|| {
+                    (opening.is_some_and(|d| date < d) || date > closing && measure == "daily")
+                        .then_some(0)
+                })?;
+                Some((precinct, votes.checked_add(early_votes)?))
+            })
+            .collect();
+        let mut reported = BTreeMap::<(NaiveDate, &str), u8>::new();
+        for row in rows
+            .iter()
+            .filter(|r| r.method == "mail" || r.method == "in_person")
+        {
+            *reported
+                .entry((row.date, row.precinct.as_deref().unwrap()))
+                .or_default() |= if row.method == "mail" { 1 } else { 2 };
         }
-    }
-    if !exact.is_empty() {
-        daily = exact;
-    }
+        let latest = reported
+            .into_iter()
+            .filter(|((day, precinct), methods)| {
+                *methods == 3
+                    || *methods == 1
+                        && (opening.is_some_and(|d| *day < d)
+                            || *day > closing
+                                && (measure == "daily" || final_early.contains_key(*precinct)))
+            })
+            .map(|((day, _), _)| day)
+            .max();
+        (values, latest)
+    } else {
+        let selected: Vec<_> = rows.into_iter().filter(|r| r.method == method).collect();
+        (
+            precinct_measure(&selected, date, measure, data.through),
+            selected.iter().map(|r| r.date).max(),
+        )
+    };
     let rows: Vec<Value> = daily
         .into_iter()
         .map(|(precinct, votes)| json!({"precinct":precinct,"votes":votes}))
         .collect();
     Ok(
         json!({"state":state,"county":query.county,"date":date,"method":method,"measure":measure,"rows":rows,"comparison":false,"latest_reported":latest_reported,
-        "scope":"Reported 2026 precinct observations only; cross-cycle precinct boundaries are unverified. Cumulative values sum reported records or use the exact published snapshot.","through":data.through}),
+        "scope":"Reported 2026 precinct observations only; cross-cycle precinct boundaries are unverified. Combined values require reported mail and in-person precinct components; outside official in-person dates, daily in-person is known zero; cumulative counts after closing require the verified final in-person total. Cumulative values sum reported records or use the exact published snapshot.","through":data.through}),
     )
+}
+
+fn precinct_measure(
+    rows: &[&Observation],
+    date: NaiveDate,
+    measure: &str,
+    through: NaiveDate,
+) -> BTreeMap<String, u64> {
+    let has_date = date <= through && rows.iter().any(|r| r.date == date);
+    let mut daily = BTreeMap::<String, u64>::new();
+    let mut exact = BTreeMap::<String, u64>::new();
+    for row in rows.iter().filter(|r| has_date && r.date <= date) {
+        let precinct = row.precinct.as_ref().unwrap();
+        if row.measure == "daily" && (measure == "cumulative" || row.date == date) {
+            *daily.entry(precinct.clone()).or_default() += row.votes;
+        }
+        if row.measure == measure && row.date == date {
+            *exact.entry(precinct.clone()).or_default() += row.votes;
+        }
+    }
+    if exact.is_empty() { daily } else { exact }
 }
 
 pub async fn refresh(root: &Path, through: Option<NaiveDate>) -> Result<()> {
@@ -855,6 +953,22 @@ mod tests {
                 ]),
             );
         }
+        let mail_zeros = data
+            .observations
+            .iter()
+            .cloned()
+            .map(|mut row| {
+                row.method = "mail".into();
+                row.votes = 0;
+                for groups in row.breakdowns.values_mut() {
+                    for value in groups.values_mut() {
+                        *value = 0;
+                    }
+                }
+                row
+            })
+            .collect::<Vec<_>>();
+        data.observations.extend(mail_zeros);
         std::fs::write(
             folder.join("data/states/ga.json"),
             serde_json::to_vec(&data).unwrap(),
@@ -866,6 +980,8 @@ mod tests {
         };
         let result = view(&folder, "ga", &query).unwrap();
         assert_eq!(result["classification"], "race");
+        assert_eq!(result["method"], "total");
+        assert_eq!(result["method_labels"]["total"], "Mail + in person");
         let buckets = result["buckets"].as_array().unwrap();
         assert_eq!(buckets.len(), 2);
         assert_eq!(buckets[0]["label"], "Black");
@@ -957,6 +1073,182 @@ mod tests {
         assert_eq!(out[0].daily_2026, None);
         assert!(out[0].future);
     }
+    #[test]
+    fn combined_defaults_pair_the_same_two_methods_in_both_cycles() {
+        let folder = std::env::temp_dir().join(format!(
+            "turnout-combined-default-{}-{}",
+            std::process::id(),
+            Utc::now().timestamp_nanos_opt().unwrap()
+        ));
+        std::fs::create_dir_all(folder.join("data/states")).unwrap();
+        for (state, _, _) in STATES {
+            let mut data = fixture();
+            data.id = state.into();
+            let mail = data
+                .observations
+                .iter()
+                .cloned()
+                .map(|mut row| {
+                    row.method = "mail".into();
+                    row.votes = if row.year == 2024 { 3 } else { 5 };
+                    row
+                })
+                .collect::<Vec<_>>();
+            data.observations.extend(mail);
+            // Native COUNTABLE-like totals must not add other ballot categories.
+            let native = data
+                .observations
+                .iter()
+                .filter(|r| r.method == "in_person")
+                .cloned()
+                .map(|mut row| {
+                    row.method = "total".into();
+                    row.votes = 999;
+                    row
+                })
+                .collect::<Vec<_>>();
+            data.observations.extend(native);
+            std::fs::write(
+                folder.join(format!("data/states/{state}.json")),
+                serde_json::to_vec(&data).unwrap(),
+            )
+            .unwrap();
+            let mut query = Query {
+                date: Some(date("2026-10-19")),
+                classification: Some("partisan".into()),
+                ..Query::default()
+            };
+            let result = view(&folder, state, &query).unwrap();
+            assert_eq!(result["method"], "total");
+            assert_eq!(result["series"][0]["cumulative_2024"], 13);
+            assert_eq!(result["series"][0]["cumulative_2026"], 16);
+            assert_eq!(result["series"][1]["reported_daily_2026"], 505);
+            assert!(result["series"][1]["daily_2026"].is_null());
+            query.method = Some("in_person".into());
+            let early = view(&folder, state, &query).unwrap();
+            assert_eq!(early["method"], "in_person");
+            assert_eq!(early["series"][0]["cumulative_2024"], 10);
+            assert_eq!(early["series"][0]["cumulative_2026"], 11);
+            query.method = Some("mail".into());
+            let mail = view(&folder, state, &query).unwrap();
+            assert_eq!(mail["series"][0]["cumulative_2024"], 3);
+            assert_eq!(mail["series"][0]["cumulative_2026"], 5);
+        }
+        std::fs::remove_dir_all(folder).unwrap();
+    }
+
+    #[test]
+    fn combined_turnout_retains_preopening_mail_but_not_missing_open_day_methods() {
+        let mut data = fixture();
+        for (year, day, votes) in [
+            (2024, "2024-10-20", 7),
+            (2026, "2026-10-18", 9),
+            (2026, "2026-10-22", 20),
+        ] {
+            data.observations.push(serde_json::from_value(json!({"year":year,"date":day,"county":"a","measure":"cumulative","method":"mail","votes":votes,"breakdowns":{"race":{"Black":votes}}})).unwrap());
+        }
+        let index = Index::new(&data);
+        let rows = series(
+            &index,
+            &[date("2026-10-18")],
+            Scope {
+                members: &["a".into()],
+                method: "total",
+                dimension: Some(("race", "Black")),
+            },
+        );
+        assert_eq!(rows[0].cumulative_2024, Some(7));
+        assert_eq!(rows[0].cumulative_2026, Some(9));
+        assert!(
+            index
+                .value(2026, date("2026-10-22"), "a", "total", "cumulative")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn combined_mail_after_early_close_requires_the_verified_final_in_person_count() {
+        let mut data = fixture();
+        data.id = "nv".into();
+        data.through = date("2026-11-02");
+        for (year, day, method, measure, votes) in [
+            (2024, "2024-11-01", "in_person", "cumulative", 100),
+            (2026, "2026-10-30", "in_person", "cumulative", 110),
+            (2024, "2024-11-03", "mail", "cumulative", 20),
+            (2026, "2026-11-01", "mail", "cumulative", 25),
+            (2024, "2024-11-03", "mail", "daily", 4),
+            (2026, "2026-11-01", "mail", "daily", 5),
+        ] {
+            data.observations.push(serde_json::from_value(json!({"year":year,"date":day,"county":"a","measure":measure,"method":method,"votes":votes})).unwrap());
+        }
+        let index = Index::new(&data);
+        let out = series(
+            &index,
+            &[date("2026-11-01")],
+            Scope {
+                members: &["a".into()],
+                method: "total",
+                dimension: None,
+            },
+        );
+        assert_eq!(out[0].cumulative_2024, Some(120));
+        assert_eq!(out[0].cumulative_2026, Some(135));
+        assert_eq!(out[0].daily_2024, Some(4));
+        assert_eq!(out[0].daily_2026, Some(5));
+        data.observations.retain(|r| {
+            !(r.year == 2026 && r.method == "in_person" && r.date == date("2026-10-30"))
+        });
+        data.observations.push(serde_json::from_value(json!({"year":2026,"date":"2026-10-29","county":"a","measure":"cumulative","method":"in_person","votes":109})).unwrap());
+        assert!(
+            Index::new(&data)
+                .value(2026, date("2026-11-01"), "a", "total", "cumulative")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn combined_precinct_default_requires_both_components_and_ignores_native_extras() {
+        let mut data = fixture();
+        data.id = "va".into();
+        data.counties = vec![json!({"id":"a"})];
+        let rows=vec![
+            json!({"year":2026,"date":"2026-10-20","county":"a","precinct":"both","measure":"cumulative","method":"mail","votes":3}),
+            json!({"year":2026,"date":"2026-10-20","county":"a","precinct":"both","measure":"cumulative","method":"in_person","votes":12}),
+            json!({"year":2026,"date":"2026-10-20","county":"a","precinct":"early only","measure":"cumulative","method":"in_person","votes":40}),
+            json!({"year":2026,"date":"2026-10-20","county":"a","precinct":"early only","measure":"cumulative","method":"total","votes":999}),
+            json!({"year":2026,"date":"2026-10-20","county":"a","precinct":"mail only","measure":"cumulative","method":"mail","votes":2}),
+            json!({"year":2026,"date":"2026-10-18","county":"a","precinct":"preopening mail","measure":"cumulative","method":"mail","votes":4})
+        ].into_iter().map(|v|serde_json::from_value(v).unwrap()).collect::<Vec<_>>();
+        let mut query = PrecinctQuery {
+            county: "a".into(),
+            date: Some(date("2026-10-20")),
+            method: None,
+            measure: None,
+        };
+        let combined = precincts_from(&data, &rows, &query).unwrap();
+        assert_eq!(combined["method"], "total");
+        assert_eq!(combined["rows"], json!([{"precinct":"both","votes":15}]));
+        query.method = Some("in_person".into());
+        assert_eq!(
+            precincts_from(&data, &rows, &query).unwrap()["rows"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        query.method = None;
+        query.date = Some(date("2026-10-18"));
+        assert_eq!(
+            precincts_from(&data, &rows, &query).unwrap()["rows"],
+            json!([{"precinct":"preopening mail","votes":4}])
+        );
+        query.date = Some(date("2026-10-24"));
+        assert_eq!(
+            precincts_from(&data, &rows, &query).unwrap()["rows"],
+            json!([])
+        );
+    }
+
     #[test]
     fn a_total_requires_both_voting_methods() {
         let data = fixture();

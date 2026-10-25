@@ -361,8 +361,15 @@ async fn primary_data(State(app): State<App>) -> impl IntoResponse {
 async fn reference_data(State(app): State<App>) -> impl IntoResponse {
     aggregate_file(app, "reference.json").await
 }
-async fn statewide_data(State(app): State<App>) -> impl IntoResponse {
-    match qualified_statewide(&app) {
+#[derive(Default, Deserialize)]
+struct VotingMethodQuery {
+    method: Option<String>,
+}
+async fn statewide_data(
+    State(app): State<App>,
+    Query(query): Query<VotingMethodQuery>,
+) -> impl IntoResponse {
+    match qualified_statewide(&app, query.method.as_deref().unwrap_or("total")) {
         Ok(data) => (StatusCode::OK, Json(serde_json::to_value(data).unwrap())),
         Err(error) => (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -370,9 +377,9 @@ async fn statewide_data(State(app): State<App>) -> impl IntoResponse {
         ),
     }
 }
-fn qualified_statewide(app: &App) -> Result<statewide::Data> {
+fn qualified_statewide(app: &App, method: &str) -> Result<statewide::Data> {
     let snapshot = app.snapshot.try_read().context("snapshot busy; retry")?;
-    pages::qualified_statewide(&app.root, &snapshot)
+    pages::qualified_statewide_method(&app.root, &snapshot, method)
 }
 async fn completion_data(State(app): State<App>) -> impl IntoResponse {
     aggregate_file(app, "completeness.json").await
@@ -382,13 +389,14 @@ struct CountyBucketQuery {
     day: u32,
     view: Option<String>,
     metric: Option<String>,
+    method: Option<String>,
 }
 async fn county_bucket_view(
     State(app): State<App>,
     Query(query): Query<CountyBucketQuery>,
 ) -> impl IntoResponse {
     let result = (|| -> Result<serde_json::Value> {
-        let statewide = qualified_statewide(&app)?;
+        let statewide = qualified_statewide(&app, query.method.as_deref().unwrap_or("total"))?;
         let reference: county_buckets::Reference =
             serde_json::from_slice(&std::fs::read(app.root.join("data/county-reference.json"))?)?;
         Ok(serde_json::to_value(county_buckets::analyze(
@@ -656,7 +664,7 @@ async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--help") {
         println!(
-            "texas-turnout [serve|refresh|rebuild|pages] [--through YYYY-MM-DD] [--offline] [--port 8741] [--recheck-history]\nrebuild uses retained aggregates only. Default cutoff: latest completed America/Chicago day, capped October 30. Refresh every TURNOUT_REFRESH_SECONDS (default 1800)."
+            "texas-turnout [serve|refresh|rebuild|statewide|pages] [--through YYYY-MM-DD] [--offline] [--port 8741] [--recheck-history]\nrebuild uses retained aggregates only. statewide refreshes county aggregates, or rebuilds them with --offline. Default cutoff: latest completed America/Chicago day, capped October 30. Refresh every TURNOUT_REFRESH_SECONDS (default 3600)."
         );
         return Ok(());
     }
@@ -728,6 +736,21 @@ async fn main() -> Result<()> {
         snapshot
     };
     let client=reqwest::Client::builder().cookie_store(true).user_agent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36").connect_timeout(Duration::from_secs(20)).timeout(Duration::from_secs(120)).build()?;
+    if args.get(1).is_some_and(|s| s == "statewide") {
+        let cutoff = through.unwrap_or_else(latest_completed);
+        let report = if args.iter().any(|s| s == "--offline") {
+            statewide::rebuild(&root, cutoff)?
+        } else {
+            statewide::refresh(&client, &root, cutoff).await?
+        };
+        println!(
+            "{} county aggregates · {} · through {}",
+            report.counties.len(),
+            statewide::method_label(&report.voting_method),
+            report.through
+        );
+        return Ok(());
+    }
     let app = App {
         snapshot: Arc::new(RwLock::new(snapshot)),
         updating: Arc::new(Mutex::new(())),
@@ -743,7 +766,7 @@ async fn main() -> Result<()> {
         let seconds = std::env::var("TURNOUT_REFRESH_SECONDS")
             .ok()
             .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or(1800)
+            .unwrap_or(3600)
             .max(60);
         tokio::spawn(async move {
             loop {

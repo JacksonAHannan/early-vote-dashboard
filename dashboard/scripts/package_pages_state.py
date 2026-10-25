@@ -71,6 +71,14 @@ def validate_json(data, path):
                 pending.append(item)
         elif isinstance(value, list):
             pending.extend(value)
+    if path == "dashboard/data/statewide.json":
+        counties = document.get("counties") if isinstance(document, dict) else None
+        if not isinstance(document, dict) or document.get("schema_version") != 2 or not isinstance(counties, list) or not counties:
+            raise ValueError("Mail-capable Texas county aggregates are required; refresh or rebuild statewide inputs")
+        for county in counties:
+            days = county.get("days") if isinstance(county, dict) else None
+            if not isinstance(days, list) or not days or any(not isinstance(day, dict) or not isinstance(day.get("by_method"), dict) or not {"in_person", "mail", "total"}.issubset(day["by_method"]) for day in days):
+                raise ValueError("Mail-capable Texas county method series are missing")
     return document
 
 

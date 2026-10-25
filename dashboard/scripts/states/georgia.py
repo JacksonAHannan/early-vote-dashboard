@@ -19,6 +19,7 @@ import re
 import socket
 import ssl
 import struct
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
@@ -48,6 +49,19 @@ def encode(value):
     return json.dumps(value, ensure_ascii=False, separators=(',', ':')).encode()
 
 
+def compatible_request(url, headers):
+    """Use the dashboard's existing browser-compatible public HTTP transport."""
+    command = ['uv', 'run', '--quiet', '--with', 'curl-cffi==0.16.3',
+               '--with', 'playwright==1.64.1', 'python',
+               str(ROOT / 'dashboard/scripts/transport.py')]
+    result = subprocess.run(command, input=encode({'url': url, 'headers': headers or {}}),
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=240)
+    if result.returncode:
+        # Helper stderr/stdout can contain response/request material: never log it.
+        raise RuntimeError('Compatible public HTTP transport failed')
+    return result.stdout
+
+
 def request_bytes(url, description, headers=None):
     """Identify a failed public boundary without logging query/session credentials."""
     request = urllib.request.Request(url, headers=headers or {})
@@ -55,12 +69,21 @@ def request_bytes(url, description, headers=None):
         with urllib.request.urlopen(request, timeout=60) as response:
             return response.read()
     except urllib.error.HTTPError as error:
+        status = error.code
+        error.close()
+        if status in (403, 429) or 500 <= status < 600:
+            try:
+                return compatible_request(url, headers)
+            except Exception:
+                # Keep the endpoint diagnostic, without subprocess payloads or
+                # credential-bearing arguments from a timeout/error object.
+                pass
         parsed = urllib.parse.urlsplit(url)
         host = parsed.hostname or ''
         if parsed.port:
             host += f':{parsed.port}'
         endpoint = urllib.parse.urlunsplit((parsed.scheme, host, parsed.path, '', ''))
-        raise RuntimeError(f'{description}: HTTP {error.code} at {endpoint}') from None
+        raise RuntimeError(f'{description}: HTTP {status} at {endpoint}') from None
 
 
 class Archive:

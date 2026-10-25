@@ -132,6 +132,10 @@ impl Report {
     }
 
     pub fn statewide(&self, mut data: crate::statewide::Data) -> crate::statewide::Data {
+        // These controls certify early in-person reports only.
+        if data.voting_method != "in_person" {
+            return data;
+        }
         for county in &mut data.counties {
             for d in &mut county.days {
                 for year in [2024, 2026] {

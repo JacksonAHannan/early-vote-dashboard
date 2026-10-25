@@ -6,7 +6,7 @@ Rust scraper, analysis, scheduler and HTTP server. The Counties workspace compar
 ./dashboard/run.sh
 ```
 
-Open **http://127.0.0.1:8741**. It starts with the saved snapshot and checks official sources immediately, then every 30 minutes while running. The browser checks for completed refreshes every five seconds. Stop with Ctrl+C. No machine-wide service is installed.
+Open **http://127.0.0.1:8741**. It starts with the saved snapshot and checks official sources immediately, then every hour while running. The browser checks for completed refreshes every five seconds. Stop with Ctrl+C. No machine-wide service is installed.
 
 The default cutoff is yesterday in America/Chicago, capped at October 30, 2026. Equivalent calendar days are compared from October 19, 2026 and October 21, 2024. Partial current-day voting is excluded. Day controls select cumulative periods; Ellis publishes a cumulative workbook without per-voter dates, so earlier precinct cutoffs remain unavailable.
 
@@ -252,3 +252,16 @@ Primary-source links, transport/scope qualifications, independent controls and r
 Automatic-range verification: `node --test dashboard/tests/regression-scale.test.cjs` and `TURNOUT_TEST_URL=http://127.0.0.1:8743 uv run --with playwright --with pillow python dashboard/tests/regression_auto.py`.
 
 GitHub Pages publication and unattended refresh: see [PAGES.md](PAGES.md).
+
+
+### Combined turnout and hourly updates
+
+County/state views open with **Mail + in person**. Texas SOS native cumulative mail is preserved for both cycles, including receipts before regular in-person voting opened. Daily mail uses the preceding calendar day's cumulative report; downward revisions and missing prior reports remain unknown. Combined points require both methods on the same geography and date in both years. Independent full-county in-person controls may replace an underfilled SOS in-person count; matched precinct subsets are never added to full-county mail. Sources retain the scope and provenance of each component. Separate Mail and In person controls remain available.
+
+Texas precinct visuals remain explicitly In person. The optional `collect_harris_mail.py` audit validates native records without retaining identities and preserves the last successful output on a failed gate. Its current paired historical source totals disagree with SOS by-mail controls; therefore no combined Harris precinct cohort is published. See `sources/mail-turnout/precinct-findings.md` and `texas-aggregate-findings.md`.
+
+Georgia/NC/Nevada combined counts use their paired mail and early in-person components. Virginia combines MAIL_IN with ON_MACHINE; extra COUNTABLE categories are excluded. Published returned-mail definitions vary by source and are disclosed under Sources. Future dates retain the historical benchmark without filling current-year unknowns.
+
+GitHub Actions is scheduled once an hour at minute17 UTC; actual starts may be delayed by GitHub. Browser data reloads/publication checks and the local Rust default collector interval are hourly. Manual Check updates checks the current publication immediately. Local manual source refresh polls only until that explicitly requested job completes.
+
+`texas-turnout statewide [--through YYYY-MM-DD] [--offline]` refreshes only county aggregates or rebuilds them from retained native caches. `build_statewide.py --through ... [--offline]` delegates to that canonical Rust implementation. Cached schema1 in-person-only files cannot masquerade as combined turnout; retained native bytes migrate to schema2 or historical sources are fetched again.

@@ -22,6 +22,7 @@ class PagesStateTests(unittest.TestCase):
         for path in state.REQUIRED:
             self.put(path, {"county": "Example", "votes": 100, "sources": [{"url": "https://example.org/data", "sha256": "abc"}]})
         self.put("dashboard/data/reference.json", [{"id": "example", "name": "Example"}])
+        self.put("dashboard/data/statewide.json", {"schema_version": 2, "counties": [{"id": "example", "days": [{"by_method": {method: {} for method in ("in_person", "mail", "total")}}]}]})
         self.map_path = "dashboard/data/maps/example.geojson"
         self.put(self.map_path, {"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"precinct": "P1"}, "geometry": {"type": "Point", "coordinates": [-97.5, 32.5]}}]})
         self.archive = self.directory / "aggregate-state.tar.gz"
@@ -67,6 +68,22 @@ class PagesStateTests(unittest.TestCase):
             self.put(path, {"voter_id": "DO NOT PUBLISH"})
         state.package(self.root, self.archive)
         self.assertEqual(set(state.inspect_archive(self.archive)), state.REQUIRED | {self.map_path})
+
+    def test_legacy_in_person_cache_cannot_replace_combined_bootstrap(self):
+        state.package(self.root, self.archive)
+        before = self.archive.read_bytes()
+        self.put("dashboard/data/statewide.json", {"schema_version": 1, "counties": []})
+        with self.assertRaisesRegex(ValueError, "Mail-capable"):
+            state.package(self.root, self.archive)
+        self.assertEqual(self.archive.read_bytes(), before)
+
+    def test_legacy_in_person_archive_is_rejected_before_restore_writes(self):
+        state.package(self.root, self.archive)
+        self.rewrite(lambda members: [(m, json.dumps({"schema_version": 1, "counties": []}).encode() if m.name == "dashboard/data/statewide.json" else data) for m, data in members])
+        target = self.directory / "restored"
+        with self.assertRaisesRegex(ValueError, "Mail-capable"):
+            state.restore(target, self.archive)
+        self.assertFalse(target.exists())
 
     def test_geojson_allowed_only_in_the_maps_tree(self):
         for path in ["dashboard/data/states/private.geojson", "dashboard/data/cache/private.geojson", "sources/multistate/va/precincts/private.geojson"]:
