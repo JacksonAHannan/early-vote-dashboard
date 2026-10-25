@@ -13,8 +13,10 @@ from matplotlib.patches import Rectangle
 
 ROOT = Path(__file__).resolve().parents[2]
 COLORS = ['#285b91', '#9ec3e5', '#deebf7', '#fae1dc', '#e6a69a', '#a84236']
-REG = FontProperties(fname='/usr/share/fonts/gsfonts/NimbusSans-Regular.otf')
-BOLD = FontProperties(fname='/usr/share/fonts/gsfonts/NimbusSans-Bold.otf')
+REGULAR_FONT = Path('/usr/share/fonts/gsfonts/NimbusSans-Regular.otf')
+BOLD_FONT = Path('/usr/share/fonts/gsfonts/NimbusSans-Bold.otf')
+REG = FontProperties(fname=str(REGULAR_FONT)) if REGULAR_FONT.is_file() else FontProperties(family='DejaVu Sans')
+BOLD = FontProperties(fname=str(BOLD_FONT)) if BOLD_FONT.is_file() else FontProperties(family='DejaVu Sans', weight='bold')
 INK = '#17212b'
 GRID = '#dce3ea'
 COUNTIES_PER_PAGE = 9
