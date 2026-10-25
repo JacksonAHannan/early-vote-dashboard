@@ -50,6 +50,18 @@ pub struct Data {
     pub method: String,
 }
 
+/// Fixed March-primary evidence is versioned with the application, so an older
+/// retained November-turnout cache cannot silently restore six-county coverage.
+/// Development checkouts without that edition retain the legacy aggregate path.
+pub fn primary_path(root: &std::path::Path) -> std::path::PathBuf {
+    let edition = root.join("primary/2026.json");
+    if edition.is_file() {
+        edition
+    } else {
+        root.join("data/primary.json")
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct Point {
     pub county: String,
@@ -90,6 +102,50 @@ pub struct Coverage {
     pub counties_missing_period: Vec<String>,
 }
 
+/// The existing Census buckets crossed with the established partisan bands.
+/// The last column retains mixed-margin, tied and missing presidential groups.
+#[derive(Debug, Serialize)]
+pub struct PartisanMatrix {
+    pub columns: Vec<String>,
+    pub cells: Vec<Vec<Cohort>>,
+    pub totals: Vec<Cohort>,
+}
+
+impl PartisanMatrix {
+    fn new(rows: usize) -> Self {
+        let columns: Vec<_> = crate::LABELS
+            .iter()
+            .copied()
+            .chain(["Mixed / unknown"])
+            .map(str::to_owned)
+            .collect();
+        Self {
+            cells: vec![vec![Cohort::default(); columns.len()]; rows],
+            totals: vec![Cohort::default(); columns.len()],
+            columns,
+        }
+    }
+
+    fn add(&mut self, row: usize, partisan: Option<usize>, old: u64, new: u64) {
+        let column = partisan
+            .filter(|&index| index < crate::LABELS.len())
+            .unwrap_or(crate::LABELS.len());
+        self.cells[row][column].add(old, new);
+        self.totals[column].add(old, new);
+    }
+
+    fn finish(&mut self) {
+        for cell in self
+            .cells
+            .iter_mut()
+            .flatten()
+            .chain(self.totals.iter_mut())
+        {
+            cell.finish();
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct View {
     pub county: String,
@@ -98,6 +154,7 @@ pub struct View {
     pub metric: Metric,
     pub points: Vec<Point>,
     pub bins: Vec<Bin>,
+    pub partisan_matrix: PartisanMatrix,
     pub n: usize,
     pub fit: Option<regression::Fit>,
     pub coverage: Coverage,
@@ -238,6 +295,7 @@ pub fn analyze(
             ratio: None,
         })
         .collect();
+    let mut partisan_matrix = PartisanMatrix::new(bins.len());
     let mut points = Vec::new();
     let mut coverage = Coverage::default();
     for county in snapshot
@@ -279,6 +337,7 @@ pub fn analyze(
             bin.groups += 1;
             bin.votes_2024 += group.votes_2024;
             bin.votes_2026 += group.votes_2026;
+            partisan_matrix.add(bucket, group.bucket, group.votes_2024, group.votes_2026);
             coverage.included.add(group.votes_2024, group.votes_2026);
             if group.votes_2024 == 0 {
                 coverage.omitted_zero_baseline += 1;
@@ -298,6 +357,7 @@ pub fn analyze(
             });
         }
     }
+    partisan_matrix.finish();
     for bin in &mut bins {
         bin.ratio = crate::ratio(bin.votes_2026, bin.votes_2024);
     }
@@ -323,6 +383,7 @@ pub fn analyze(
         fit: regression::fit(&xy),
         points,
         bins,
+        partisan_matrix,
         coverage,
         method: format!("{} {COHORT_METHOD}", demographics.method)
             .trim()
@@ -334,6 +395,23 @@ pub fn analyze(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn versioned_primary_precedes_retained_cache() {
+        let root = std::env::temp_dir().join(format!(
+            "turnout-primary-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(root.join("primary")).unwrap();
+        assert_eq!(primary_path(&root), root.join("data/primary.json"));
+        std::fs::write(root.join("primary/2026.json"), b"fixed March evidence").unwrap();
+        assert_eq!(primary_path(&root), root.join("primary/2026.json"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     fn inputs(groups: serde_json::Value, precincts: serde_json::Value) -> (Snapshot, Data) {
         let snapshot = serde_json::from_value(json!({
@@ -504,5 +582,162 @@ mod tests {
                 .len(),
             1
         );
+    }
+    fn assert_matrix_partitions(view: &View) {
+        let matrix = &view.partisan_matrix;
+        assert_eq!(matrix.columns.len(), crate::LABELS.len() + 1);
+        assert_eq!(matrix.columns.last().unwrap(), "Mixed / unknown");
+        assert_eq!(matrix.cells.len(), view.bins.len());
+        for (row, bin) in matrix.cells.iter().zip(&view.bins) {
+            assert_eq!(row.iter().map(|c| c.groups).sum::<u64>(), bin.groups);
+            assert_eq!(
+                row.iter().map(|c| c.votes_2024).sum::<u64>(),
+                bin.votes_2024
+            );
+            assert_eq!(
+                row.iter().map(|c| c.votes_2026).sum::<u64>(),
+                bin.votes_2026
+            );
+            for cell in row {
+                assert_eq!(cell.ratio, crate::ratio(cell.votes_2026, cell.votes_2024));
+            }
+        }
+        for (index, total) in matrix.totals.iter().enumerate() {
+            assert_eq!(
+                matrix.cells.iter().map(|r| r[index].groups).sum::<u64>(),
+                total.groups
+            );
+            assert_eq!(
+                matrix
+                    .cells
+                    .iter()
+                    .map(|r| r[index].votes_2024)
+                    .sum::<u64>(),
+                total.votes_2024
+            );
+            assert_eq!(
+                matrix
+                    .cells
+                    .iter()
+                    .map(|r| r[index].votes_2026)
+                    .sum::<u64>(),
+                total.votes_2026
+            );
+        }
+        assert_eq!(
+            matrix.totals.iter().map(|c| c.groups).sum::<u64>(),
+            view.coverage.included.groups
+        );
+        assert_eq!(
+            matrix.totals.iter().map(|c| c.votes_2024).sum::<u64>(),
+            view.coverage.included.votes_2024
+        );
+        assert_eq!(
+            matrix.totals.iter().map(|c| c.votes_2026).sum::<u64>(),
+            view.coverage.included.votes_2026
+        );
+    }
+
+    #[test]
+    fn joint_matrix_pools_votes_and_respects_demographic_cut_boundaries() {
+        let mut trump_a = group(&["a"], 100, 80);
+        trump_a["bucket"] = json!(5);
+        trump_a["harris"] = json!(20);
+        trump_a["trump"] = json!(80);
+        let mut trump_b = trump_a.clone();
+        trump_b["new"] = json!(["b"]);
+        trump_b["votes_2024"] = json!(900);
+        trump_b["votes_2026"] = json!(450);
+        let mut middle = group(&["d"], 10, 20);
+        middle["bucket"] = json!(2);
+        let (s, d) = inputs(
+            json!([trump_a, trump_b, group(&["c"], 100, 120), middle]),
+            json!({"a":{"counts":{"n":80,"d":100}},"b":{"counts":{"n":100,"d":100}},
+                "c":{"counts":{"n":80,"d":100}},"d":{"counts":{"n":20,"d":100}}}),
+        );
+        let v = analyze(&s, &d, "all", 1, "matched", "share").unwrap();
+        let trump = &v.partisan_matrix.cells[4][5];
+        assert_eq!(
+            (trump.groups, trump.votes_2024, trump.votes_2026),
+            (2, 1000, 530)
+        );
+        assert_eq!(trump.ratio, Some(0.53));
+        assert_eq!(v.partisan_matrix.cells[4][0].ratio, Some(1.2));
+        assert_eq!(v.partisan_matrix.cells[1][2].ratio, Some(2.0));
+        assert_eq!(v.partisan_matrix.cells[0][2].groups, 0);
+        assert_matrix_partitions(&v);
+    }
+
+    #[test]
+    fn joint_matrix_preserves_unknowns_and_existing_completeness_and_cohort_rules() {
+        let mut mixed = group(&["mixed"], 20, 16);
+        mixed["bucket"] = serde_json::Value::Null;
+        let mut unavailable = group(&["unavailable"], 200, 180);
+        unavailable["available"] = json!(false);
+        let mut changed = group(&["changed"], 30, 24);
+        changed["unchanged"] = json!(false);
+        let (s, d) = inputs(
+            json!([
+                group(&["a"], 10, 8),
+                mixed,
+                unavailable,
+                changed,
+                group(&["missing"], 100, 90)
+            ]),
+            json!({"a":{"counts":{"n":20,"d":100}},"mixed":{"counts":{"n":20,"d":100}},
+                "unavailable":{"counts":{"n":20,"d":100}},"changed":{"counts":{"n":20,"d":100}}}),
+        );
+        let matched = analyze(&s, &d, "all", 1, "matched", "share").unwrap();
+        let unchanged = analyze(&s, &d, "all", 1, "unchanged", "share").unwrap();
+        assert_eq!(matched.coverage.included.groups, 3);
+        assert_eq!(unchanged.coverage.included.groups, 2);
+        assert_eq!(matched.coverage.missing_demographics.groups, 1);
+        assert_eq!(matched.partisan_matrix.cells[1][6].votes_2024, 20);
+        assert_eq!(matched.partisan_matrix.totals[0].votes_2024, 40);
+        assert_eq!(unchanged.partisan_matrix.totals[0].votes_2024, 10);
+        assert_matrix_partitions(&matched);
+        assert_matrix_partitions(&unchanged);
+    }
+
+    #[test]
+    fn joint_matrix_retains_zero_baseline_votes_and_distinguishes_empty_from_zero_turnout() {
+        let mut zero_current = group(&["zero"], 100, 0);
+        zero_current["bucket"] = json!(5);
+        let (s, d) = inputs(
+            json!([
+                group(&["new"], 0, 7),
+                zero_current,
+                group(&["empty"], 50, 60)
+            ]),
+            json!({"new":{"counts":{"n":0,"d":100}},"zero":{"counts":{"n":0,"d":100}},
+                "empty":{"counts":{"n":0,"d":0}}}),
+        );
+        let v = analyze(&s, &d, "all", 1, "matched", "share").unwrap();
+        assert_eq!(v.partisan_matrix.cells[0][0].votes_2026, 7);
+        assert_eq!(v.partisan_matrix.cells[0][0].ratio, None);
+        assert_eq!(v.partisan_matrix.cells[0][1].groups, 0);
+        assert_eq!(v.partisan_matrix.cells[0][1].ratio, None);
+        assert_eq!(v.partisan_matrix.cells[0][5].ratio, Some(0.0));
+        assert_eq!(v.coverage.zero_denominator.groups, 1);
+        assert_matrix_partitions(&v);
+    }
+
+    #[test]
+    fn joint_matrix_all_counties_and_county_scope_use_the_same_partitions() {
+        let (mut s, mut d) = inputs(
+            json!([group(&["a"], 10, 15)]),
+            json!({"a":{"counts":{"n":90,"d":100}}}),
+        );
+        let mut second = s.counties[0].clone();
+        second.id = "second".into();
+        s.counties.push(second);
+        d.counties
+            .insert("second".into(), d.counties["test"].clone());
+        let all = analyze(&s, &d, "all", 1, "matched", "share").unwrap();
+        let one = analyze(&s, &d, "test", 1, "matched", "share").unwrap();
+        assert_eq!(all.partisan_matrix.cells[4][0].votes_2024, 20);
+        assert_eq!(one.partisan_matrix.cells[4][0].votes_2024, 10);
+        assert_matrix_partitions(&all);
+        assert_matrix_partitions(&one);
     }
 }

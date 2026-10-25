@@ -315,7 +315,7 @@ async fn trend_view(State(app): State<App>, Query(query): Query<TrendsQuery>) ->
                     app.root.join("data/demographics.json"),
                 )?)?),
                 "primary" => Some(serde_json::from_slice(&std::fs::read(
-                    app.root.join("data/primary.json"),
+                    demographics::primary_path(&app.root),
                 )?)?),
                 _ => anyhow::bail!("Unknown classification view"),
             };
@@ -356,7 +356,18 @@ async fn aggregate_file(app: App, file: &str) -> impl IntoResponse {
     }
 }
 async fn primary_data(State(app): State<App>) -> impl IntoResponse {
-    aggregate_file(app, "primary.json").await
+    match std::fs::read(demographics::primary_path(&app.root)) {
+        Ok(bytes) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "application/json")],
+            bytes,
+        ),
+        Err(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            [(header::CONTENT_TYPE, "application/json")],
+            br#"{"error":"Primary data unavailable"}"#.to_vec(),
+        ),
+    }
 }
 async fn reference_data(State(app): State<App>) -> impl IntoResponse {
     aggregate_file(app, "reference.json").await
@@ -452,7 +463,12 @@ async fn demographic_view(
             "primary" => "primary.json",
             _ => anyhow::bail!("Unknown classification view"),
         };
-        let bytes = std::fs::read(app.root.join("data").join(file))?;
+        let path = if file == "primary.json" {
+            demographics::primary_path(&app.root)
+        } else {
+            app.root.join("data").join(file)
+        };
+        let bytes = std::fs::read(path)?;
         let census: demographics::Data = serde_json::from_slice(&bytes)?;
         let cohort = query.cohort.as_deref().unwrap_or("matched");
         let snapshot = app.snapshot.try_read().context("snapshot busy; retry")?;

@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
+from functools import lru_cache
 import json
 from pathlib import Path
 import re
@@ -25,6 +26,7 @@ ROOT=Path(__file__).resolve().parents[2]
 STORE=ROOT/'sources/primary-participation'
 RAW=STORE/'raw'
 OUTPUT=ROOT/'dashboard/data/primary.json'
+PUBLISHED=ROOT/'dashboard/primary/2026.json'
 BASE='https://results.enr.clarityelections.com/TX/'
 SOURCES={
  'dallas-dem-detailxml.zip':BASE+'Dallas/126006/368801/reports/detailxml.zip',
@@ -40,9 +42,23 @@ SOURCES={
  'madison-reconciliation.pdf':'https://www.co.madison.tx.us/upload/page/0407/March%203%202026%20Official%20reconcilliation.pdf',
  'ellis-index.pdf':'https://www.elliscountytx.gov/DocumentCenter/View/23023/260303_Republican-Primary-Election_Final-PctbyRace_Totals?bidId=',
 }
+SOURCES.update({'tarrant-dem.pdf': 'https://www.tarrantcountytx.gov/content/dam/main/elections/2026/pm26/reports/precinct_dem.pdf',
+ 'tarrant-rep.pdf': 'https://www.tarrantcountytx.gov/content/dam/main/elections/2026/pm26/reports/precinct_rep.pdf',
+ 'harris-rep.pdf': 'https://hctxdnnstg.blob.core.windows.net/harrisvotes/prd/Reports/2026/Official%20Canvass%20Results%20Republican%20Party-3-10-2026%2006-22-52%20PM.pdf?sv=2017-04-17&sr=b&si=DNNFileManagerPolicy&sig=UnG%2F%2FoaSvaRFWJ3n5uVu1e7MK%2ByFQP%2F6%2BP86n7NTJNU%3D',
+ 'harris-dem.pdf': 'https://hctxdnnstg.blob.core.windows.net/harrisvotes/prd/Reports/2026/Official%20Canvass%20Results%20Democratic%20Party-3-10-2026%2006-22-52%20PM.pdf?sv=2017-04-17&sr=b&si=DNNFileManagerPolicy&sig=V3b0hsoWHHzJM%2Fd1LfVeKxLqeRqcKHb5znJCjLRZXPA%3D',
+ 'bexar-dem.pdf': 'https://elections.bexar.gov/DocumentCenter/View/1193/March-3-2026-Democratic---Official-Precinct-Report-PDF',
+ 'bexar-rep.pdf': 'https://elections.bexar.gov/DocumentCenter/View/1197/March-3-2026-Republican---Official-Precinct-Report-PDF',
+ 'collin-precinct.pdf': 'https://www.collincountytx.gov/docs/default-source/elections/results-archive/march-3-2026-primary-election-precinct-report-official-final.pdf?sfvrsn=6a9728bc_11',
+ 'collin-summary.pdf': 'https://www.collincountytx.gov/docs/default-source/elections/results-archive/march-3-2026-primary-election-summary-report-official-final.pdf?sfvrsn=13303697_9',
+ 'bexar-summary.pdf': 'https://elections.bexar.gov/DocumentCenter/View/1196/March-3-2026-Primary-Results-PDF'})
+SOURCES['tarrant-detailxml.zip']='https://results.enr.clarityelections.com/TX/Tarrant/125924/368843/reports/detailxml.zip'
+SOURCES.update({'denton-dem-reports.zip': 'https://assets01.aws.connect.clarityelections.com/Assets/Connect/RootPublish/denton-tx.connect.clarityelections.com/ElectionResults/2026/PM26/Dem/Democratic_Results_Reports.zip', 'denton-rep-reports.zip': 'https://assets01.aws.connect.clarityelections.com/Assets/Connect/RootPublish/denton-tx.connect.clarityelections.com/ElectionResults/2026/PM26/Rep/Republican_Results_Reports.zip'})
 CONTROLS={'dallas':{'dem':280326,'rep':103818},'montgomery':{'dem':31510,'rep':80092},
           'hays':{'dem':34049,'rep':18686},'mclennan':{'dem':15093,'rep':23727},
-          'ellis':{'dem':18894,'rep':25994},'madison':{'dem':419,'rep':1887}}
+          'ellis':{'dem':18894,'rep':25994},'madison':{'dem':419,'rep':1887},
+          'tarrant':{'dem':189583,'rep':147471},'harris':{'dem':366703,'rep':200312},
+          'denton':{'dem':83001,'rep':88195},
+          'bexar':{'dem':194863,'rep':96502},'collin':{'dem':96078,'rep':104260}}
 METHOD=('March 3, 2026 Democratic and Republican primary ballots cast, all voting modes, '
         'from county-published aggregate reports. Democratic share is Democratic ballots / '
         '(Democratic + Republican ballots), summed over complete native 26P precincts before '
@@ -52,6 +68,11 @@ METHOD=('March 3, 2026 Democratic and Republican primary ballots cast, all votin
         'use the explicit Total Ballots Cast column; Ellis uses party Ballots Cast statistics. '
         'Madison uses visually verified explicit Total Ballots Cast columns from a scanned '
         'canvass, reconciled to the signed official combined total; its stale page header is not used. '
+        'Denton uses explicit Total Ballots Cast in its official party canvasses. '
+        'Tarrant uses explicit precinct ballots-cast headers; Harris uses Total Ballots Cast; '
+        'Bexar and Collin use party-specific Ballots Cast statistics. Collin publishes a '
+        'precinct report short of its county summary by 15 Democratic and 11 Republican '
+        'ballots; these unlocated ballots remain excluded. '
         'Candidate-vote sums are never substituted. Limited/federal-only records without a '
         'native precinct match and missing precincts are excluded, never assigned by area '
         'or assumed zero. No voter-level records are read or retained.')
@@ -99,17 +120,18 @@ def parse_dallas(party):
     return rows, {'reported_ballots':total,'source_records':len(rows),'excluded_records':{}}
 
 
-def pdf_text(name):
+@lru_cache(maxsize=None)
+def pdf_text(name, pages=20):
     # First 20 pages contain each statewide-senator canvass table, including the
     # right-hand continuation pages of Montgomery's 8-candidate Republican race.
-    result=subprocess.check_output(['pdftotext','-layout','-f','1','-l','20',str(RAW/name),'-'],text=True)
+    result=subprocess.check_output(['pdftotext','-layout']+(['-f','1','-l',str(pages)] if pages else [])+[str(RAW/name),'-'],text=True)
     (STORE/(name.removesuffix('.pdf')+'-extract.txt')).write_text(result)
     return result
 
 
 def parse_canvass(county,party):
     name=f'{county}-{party}.pdf'
-    text=pdf_text(name)
+    text=pdf_text(name,65 if county=='harris' else 20)
     assert '3/3/2026' in text
     assert 'Total Ballots Cast' in text
     assert ('Democratic' if party=='dem' else 'Republican') in text
@@ -174,6 +196,82 @@ def parse_madison(party):
                  'source_header_caveat':transcription['source_caveat']}
 
 
+def parse_denton(party):
+    with zipfile.ZipFile(RAW/f'denton-{party}-reports.zip') as archive:
+        name=('Democratic_Results_Reports/Dem_Canvass-Official.pdf' if party=='dem'
+              else 'Republican_Results_Reports/Rep_Canvass-Official.pdf')
+        (RAW/f'denton-{party}.pdf').write_bytes(archive.read(name))
+    return parse_canvass('denton',party)
+
+
+def parse_tarrant(party):
+    text=pdf_text(f'tarrant-{party}.pdf',pages=None)
+    assert '3/3/2026' in text and 'Official Results' in text
+    assert ('DEM' if party=='dem' else 'REP')+' Precinct Report' in text
+    rows={}
+    for identity,value in re.findall(r'^\s*(\d+)\s+([\d,]+) ballots cast\s*$',text,re.M):
+        identity=normalize(identity); value=integer(value)
+        # Each precinct's explicit ballot header repeats on continuation pages.
+        assert identity not in rows or rows[identity]==value,(party,identity)
+        rows[identity]=value
+    printed={integer(v) for v in re.findall(r'Ballots Cast\s*\n\s*([\d,]+)',text)}
+    total=CONTROLS['tarrant'][party]
+    assert printed=={total} and sum(rows.values())==total
+    return rows,{'reported_ballots':total,'source_records':len(rows),'excluded_records':{}}
+
+
+@lru_cache(maxsize=None)
+def statistics_records(name,county):
+    text=pdf_text(name,pages=None)
+    assert 'March 3, 2026' in text
+    assert ('OFFICIAL RESULTS' if county=='bexar' else 'FINAL RESULTS') in text
+    records={}
+    for page in text.split('\f'):
+        if 'Statistics' not in page:continue
+        label=page.split('Statistics',1)[0].strip().splitlines()[-1].strip()
+        counts={}
+        for party,title in [('dem','Democratic'),('rep','Republican'),('total','Total')]:
+            match=re.search(r'Ballots Cast - '+title+(r' Party' if party!='total' else '')+r'\s+([\d,]+)',page)
+            assert match,(name,label,party)
+            counts[party]=integer(match[1])
+        assert counts['dem']+counts['rep']==counts['total'],(name,label)
+        assert label not in records or records[label]==counts,(name,label)
+        records[label]=counts
+    assert records,(name,'no statistics')
+    return records
+
+
+def parse_statistics(county,party,expected):
+    # Both Bexar party reports repeat the same combined statistics. Require an
+    # exact second-report check, rather than treating candidate totals as ballots.
+    names=['bexar-dem.pdf','bexar-rep.pdf'] if county=='bexar' else ['collin-precinct.pdf']
+    records=statistics_records(names[0],county)
+    if county=='bexar':assert records==statistics_records(names[1],county)
+    summary=pdf_text(f'{county}-summary.pdf',pages=1)
+    control=re.search(r'Ballots Cast - '+('Democratic' if party=='dem' else 'Republican')+r' Party\s+([\d,]+)',summary)
+    assert control and integer(control[1])==CONTROLS[county][party]
+    rows={};excluded={}
+    for label,values in records.items():
+        match=re.fullmatch(r'\d+' if county=='bexar' else r'PCT (\d+)',label)
+        identity=normalize(match[0] if county=='bexar' else match[1]) if match else None
+        if identity in expected:
+            assert identity not in rows,(county,identity)
+            rows[identity]=values[party]
+        else:excluded[label]=values[party]
+    reported=sum(v[party] for v in records.values())
+    # The published Collin precinct statistics omit 26 ballots found in the
+    # county summary. Preserve the independently reported precinct rows and
+    # disclose this exact source discrepancy; never spread the residual around.
+    residual=CONTROLS[county][party]-reported
+    assert residual==({'dem':15,'rep':11}[party] if county=='collin' else 0),(county,party,residual)
+    assert sum(rows.values())+sum(excluded.values())+residual==CONTROLS[county][party]
+    return rows,{'reported_ballots':CONTROLS[county][party],
+                 'source_records':len(records),'precinct_report_ballots':reported,
+                 'native_ballots':sum(rows.values()),'excluded_records':excluded,
+                 'unlocated_ballots':residual,
+                 'reconciliation':'precinct_report_short_of_summary' if residual else 'exact'}
+
+
 def build(offline=False):
     RAW.mkdir(parents=True,exist_ok=True)
     with ThreadPoolExecutor(max_workers=4) as pool:list(pool.map(lambda n:fetch(n,offline),SOURCES))
@@ -193,7 +291,11 @@ def build(offline=False):
             data['counties'][slug]={'precincts':{},'coverage':coverage}
             validation['counties'][slug]=coverage
             continue
-        parse=parse_dallas if slug=='dallas' else parse_ellis if slug=='ellis' else parse_madison if slug=='madison' else lambda party:parse_canvass(slug,party)
+        parsers={'dallas':parse_dallas,'ellis':parse_ellis,'madison':parse_madison,
+                 'denton':parse_denton,'tarrant':parse_tarrant}
+        if slug in parsers:parse=parsers[slug]
+        elif slug in ('bexar','collin'):parse=lambda party:parse_statistics(slug,party,expected)
+        else:parse=lambda party:parse_canvass(slug,party)
         dem,dem_quality=parse('dem'); rep,rep_quality=parse('rep')
         common=expected & set(dem) & set(rep)
         assert not ((set(dem)|set(rep))-expected), (slug,'unexpected native precinct')
@@ -219,6 +321,8 @@ def build(offline=False):
     data['sources'].append({'path':str(transcription.relative_to(ROOT)), 'sha256':hashlib.sha256(transcription.read_bytes()).hexdigest(), 'type':'visually_verified_transcription'})
     encoded=json.dumps(data,separators=(',',':'),sort_keys=True,allow_nan=False)+'\n'
     OUTPUT.write_text(encoded)
+    PUBLISHED.parent.mkdir(parents=True,exist_ok=True)
+    PUBLISHED.write_text(encoded)
     validation['output_sha256']=hashlib.sha256(OUTPUT.read_bytes()).hexdigest()
     (STORE/'validation.json').write_text(json.dumps(validation,indent=2,sort_keys=True)+'\n')
     print(f"Validated {validation['included_precincts']} native precincts; missing stays absent")

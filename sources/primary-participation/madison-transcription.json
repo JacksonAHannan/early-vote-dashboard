@@ -1,0 +1,38 @@
+{
+  "election_date": "2026-03-03",
+  "source": "raw/madison-canvass.pdf",
+  "measure": "Total Ballots Cast",
+  "verification": "Visually checked the explicit ballot column on each listed scanned page, its four rows and printed column total; combined total agrees with signed reconciliation total. These are not candidate-vote sums.",
+  "dem": {
+    "pdf_page": 1,
+    "contest": "United States Senator - DEMOCRATIC PARTY",
+    "precincts": {
+      "101": 85,
+      "202": 101,
+      "303": 156,
+      "404": 77
+    },
+    "printed_total": 419
+  },
+  "rep": {
+    "pdf_page": 24,
+    "contest": "United States Representative, District No. 10 - REPUBLICAN PARTY",
+    "precincts": {
+      "101": 414,
+      "202": 533,
+      "303": 308,
+      "404": 632
+    },
+    "printed_total": 1887
+  },
+  "reconciliation": {
+    "source": "raw/madison-reconciliation.pdf",
+    "pdf_page": 1,
+    "field": "M. Total ballots counted",
+    "value": 2306,
+    "date": "2026-03-10",
+    "source_sha256": "05f3ac01fb99d6f3c5ba4d289808be5ab3c082169dedb204cae388381275281f"
+  },
+  "source_caveat": "Canvass page headers display 2,360 while the explicit party precinct columns sum to 2,306; use columns supported by the signed reconciliation total. Other handwritten subcomponents are not used as controls.",
+  "source_sha256": "97f8dbce34049c92177d96598717c27e401979923adb273c69ac690859d9ed06"
+}

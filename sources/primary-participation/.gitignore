@@ -1,0 +1,5 @@
+# Preserve raw downloads and extraction evidence locally; hashes live in the edition.
+*
+!.gitignore
+!findings.md
+!madison-transcription.json

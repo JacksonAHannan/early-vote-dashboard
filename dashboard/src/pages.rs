@@ -196,7 +196,6 @@ pub fn build(root: &Path, out: &Path) -> Result<Summary> {
     )?;
     for (route, file) in [
         ("demographics", "demographics"),
-        ("primary", "primary"),
         ("reference", "reference"),
         ("completeness", "completeness"),
     ] {
@@ -204,7 +203,9 @@ pub fn build(root: &Path, out: &Path) -> Result<Summary> {
         p.route(&format!("/api/{route}"), &[], &value)?;
     }
     let census: demographics::Data = read(root, "data/demographics.json")?;
-    let primary: demographics::Data = read(root, "data/primary.json")?;
+    let primary: demographics::Data =
+        serde_json::from_slice(&std::fs::read(demographics::primary_path(root))?)?;
+    p.route("/api/primary", &[], &serde_json::to_value(&primary)?)?;
     let statewide = qualified_statewide(root, &snapshot)?;
     ensure!(
         statewide

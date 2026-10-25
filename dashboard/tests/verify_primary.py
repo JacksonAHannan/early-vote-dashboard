@@ -4,13 +4,20 @@ import hashlib
 import json
 from pathlib import Path
 import unittest
+import re
+import zipfile
+import xml.etree.ElementTree as ET
+from collections import Counter
 
 ROOT=Path(__file__).resolve().parents[2]
 DATA=json.loads((ROOT/'dashboard/data/primary.json').read_text())
 REFERENCE={c['id']:c for c in json.loads((ROOT/'dashboard/data/reference.json').read_text())}
 EXPECTED={'dallas':(791,280326,103818),'montgomery':(121,31510,80092),
           'hays':(88,33914,18643),'ellis':(60,18894,25994),
-          'mclennan':(95,15093,23727),'madison':(4,419,1887)}
+          'mclennan':(95,15093,23727),'madison':(4,419,1887),
+          'tarrant':(707,189583,147471),'harris':(1157,366703,200312),
+          'bexar':(806,194683,96460),'collin':(270,95808,104149),
+          'denton':(252,83001,88195)}
 
 class PrimaryVerification(unittest.TestCase):
     def test_sources_unchanged(self):
@@ -41,6 +48,49 @@ class PrimaryVerification(unittest.TestCase):
         for slug in ['travis','bell','hockley']:
             self.assertEqual(DATA['counties'][slug]['precincts'],{})
             self.assertEqual(DATA['counties'][slug]['coverage']['status'],'unavailable')
+
+    def test_new_counties_reconcile_without_allocating_missing_ballots(self):
+        for slug in ['tarrant','harris','bexar','collin','denton']:
+            county=DATA['counties'][slug]
+            for party in ['dem','rep']:
+                report=county['coverage']['party_reports'][party]
+                native=sum(p['counts']['primary_'+party] for p in county['precincts'].values())
+                self.assertEqual(native+sum(report['excluded_records'].values())+report.get('unlocated_ballots',0),report['reported_ballots'])
+        self.assertEqual(DATA['counties']['tarrant']['coverage']['status'],'complete')
+        self.assertEqual(DATA['counties']['bexar']['coverage']['status'],'complete')
+        self.assertEqual(len(DATA['counties']['harris']['coverage']['missing_precincts']),67)
+        self.assertEqual(DATA['counties']['collin']['coverage']['missing_precincts'],['202','266','267'])
+        for party,residual in [('dem',15),('rep',11)]:
+            report=DATA['counties']['collin']['coverage']['party_reports'][party]
+            self.assertEqual(report['unlocated_ballots'],residual)
+            self.assertEqual(report['reconciliation'],'precinct_report_short_of_summary')
+
+    def test_versioned_edition_matches_rebuild(self):
+        self.assertEqual((ROOT/'dashboard/primary/2026.json').read_bytes(),(ROOT/'dashboard/data/primary.json').read_bytes())
+
+    def test_tarrant_independent_xml_ballot_accounting(self):
+        # Independently check every explicit PDF ballot header against a second
+        # county publication's complete vote/undervote/overvote accounting.
+        # The production data still comes from explicit ballots cast, not votes.
+        with zipfile.ZipFile(ROOT/'sources/primary-participation/raw/tarrant-detailxml.zip') as archive:
+            election=ET.fromstring(archive.read('detail.xml'))
+        contests=[c for c in election.findall('Contest') if c.attrib['text']=='United States Senator']
+        self.assertEqual(len(contests),2)
+        for contest in contests:
+            party=contest.find('Choice').attrib['party'].lower()
+            totals=Counter()
+            for record in contest.findall('./Choice/VoteType/Precinct')+contest.findall('./VoteType/Precinct'):
+                match=re.fullmatch(r'(\d+)(?: - F99)?',record.attrib['name'])
+                self.assertIsNotNone(match,record.attrib['name'])
+                totals[str(int(match[1]))]+=int(record.attrib['votes'])
+            actual={pid:p['counts']['primary_'+party] for pid,p in DATA['counties']['tarrant']['precincts'].items()}
+            self.assertEqual(dict(totals),actual)
+        combined=Counter()
+        for p in election.findall('./VoterTurnout/Precincts/Precinct'):
+            match=re.fullmatch(r'(\d+)(?: - F99)?',p.attrib['name'])
+            self.assertIsNotNone(match,p.attrib['name'])
+            combined[str(int(match[1]))]+=int(p.attrib['ballotsCast'])
+        self.assertEqual(combined,{pid:p['counts']['primary_total'] for pid,p in DATA['counties']['tarrant']['precincts'].items()})
 
     def test_hays_special_ballots_reconcile_without_allocation(self):
         county=DATA['counties']['hays']

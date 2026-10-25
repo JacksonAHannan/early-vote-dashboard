@@ -61,6 +61,7 @@ const Visuals=window.Visuals={
  ready(key){
   if(!data)return false;
   if(key.startsWith('county-')||key==='counties')return CountyView.ready()&&(!['county-table','county-trend','counties'].includes(key)||Tracking.stateReady());
+  if(key==='matrix'&&matrixLayout==='joint')return Boolean(jointReady()&&jointViews[county]?.partisan_matrix);
   if(key==='daily'||key.startsWith('daily-'))return Boolean(Tracking.view&&Tracking.key===Tracking.signature());
   if(key==='map')return Boolean(Atlas.layer&&$('map-loading').hidden);
   if(['profile','demographics','precinct-trend'].includes(key))return $('selection-panel').dataset.county===Atlas.county;
@@ -94,6 +95,12 @@ const Visuals=window.Visuals={
   if(desc.classification&&desc.title.toLowerCase().includes(desc.classification.toLowerCase()))desc.classification='';
   desc.period=dates(comparisonPeriod());desc.day=day;desc.mode=mode;desc.through=data.through;desc.legendColor=mode==='demographic'?'#137b8a':'#334155';desc.cohortLabel=cohort==='unchanged'&&!['profile','demographics','precinct-trend','county-table','county-trend','counties'].includes(key)?'Unchanged precincts':'';
   if(isCounty){desc.mode=CountyView.mode;desc.scope='County totals · '+countyMethod;desc.classification=CountyView.label();desc.cohortLabel='';desc.legendColor=CountyView.mode==='demographic'?'#137b8a':'#334155';desc.source='Official Texas SOS / county '+countyMethod.toLowerCase()+' reports · 2024 presidential results'+(CountyView.mode==='demographic'?' · 2020 Census':'');if(key.startsWith('county-daily'))desc.footer='Matched counties at each point; coverage can vary by day.';if(CountyView.bucket!==null)desc.note=[desc.note,`Selected bucket: ${CountyView.view?.buckets[CountyView.bucket]?.label}`].filter(Boolean).join(' · ');if(key==='county-trend'||key==='counties'){desc.classification=countyMethod+' votes';desc.source='Official Texas SOS / county '+countyMethod.toLowerCase()+' reports';}}
+  if(key==='matrix'&&matrixLayout==='joint'){
+   desc.mode='demographic';desc.classification=jointMetric().label+(jointMetric().denominator==='vap'?' · age 18+':'');
+   desc.source=sources+' · 2020 Census PL 94-171 · 2024 presidential results';
+   desc.note=[desc.note,title('matrix-context')].filter(Boolean).join(' · ');
+   desc.footer='2026 / 2024 cumulative in-person votes · † fewer than 3 groups or 100 baseline votes · — no baseline or unavailable.';
+  }
   desc.static=key==='demographics'||key==='map'&&$('map-layer').value==='share';
   return desc;
  },
