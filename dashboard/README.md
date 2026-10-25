@@ -283,4 +283,4 @@ For the rollover browser check, set `TURNOUT_PAGES_URL` to a generated static si
 
 Source reconstruction requires the retained publisher evidence used by the audit. Reproducible findings and source qualifications: [Texas source audit](../sources/texas-stress/source-findings.md). Native response bytes and anonymous source counts are preserved; unsupported values are never replaced by a maximum, carried forward, or allocated to precincts.
 
-The header's Buy me a coffee button posts to PayPal Checkout for `jacksonahannan@outlook.com`, with a customer-entered USD amount and no shipping. The dashboard does not handle payment details. This uses PayPal's [documented Buy Now variables](https://developer.paypal.com/api/nvp-soap/paypal-payments-standard/integration-guide/Appx-websitestandard-htmlvariables/); omitting `amount` lets the visitor choose it. The initial empty-amount checkout was verified without login or payment.
+The header's Buy me a coffee button opens [paypal.me/JacksonHannan](https://paypal.me/JacksonHannan) in a separate tab. Contributions are handled by PayPal; the dashboard does not collect payment details or set an amount.
