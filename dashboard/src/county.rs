@@ -151,7 +151,7 @@ pub async fn collect(
         }
         "montgomery" => montgomery(client, r, year, n).await,
         "hays" if year == 2026 => hays(client, r, n).await,
-        "ellis" if year == 2026 => ellis(client, r).await,
+        "ellis" if year == 2026 => ellis(client, r, n).await,
         _ => bail!("no county adapter"),
     }
 }
@@ -427,7 +427,33 @@ async fn hays(client: &reqwest::Client, r: &Reference, n: u32) -> Result<Vec<Dai
         "County dated residence-precinct roster. EARLY VOTED and Prov. N only; limited and provisional ballots excluded before deduplication. State four-day roster is 179 higher and is not substituted.",
     )
 }
-async fn ellis(client: &reqwest::Client, r: &Reference) -> Result<Vec<Daily>> {
+async fn ellis(client: &reqwest::Client, r: &Reference, n: u32) -> Result<Vec<Daily>> {
+    // The county replaces an undated cumulative workbook. Its newest cutoff
+    // cannot reconstruct earlier days; independently dated SOS reports can.
+    let mut sources = match ellis_native(client, r).await {
+        Ok(values) => values,
+        Err(error) => {
+            eprintln!("Ellis county cumulative source unavailable: {error:#}");
+            Vec::new()
+        }
+    };
+    let mut identities = std::collections::BTreeSet::new();
+    for day in 0..n {
+        let date = start(2026) + chrono::Duration::days(i64::from(day));
+        match crate::fetch::fetch_state(client, r, date, &mut identities).await {
+            Ok(value) => sources.push(value),
+            Err(error) => {
+                eprintln!("Ellis dated SOS {date}: {error:#}; other observations retained")
+            }
+        }
+    }
+    ensure!(
+        !sources.is_empty(),
+        "No Ellis county or dated SOS observations available"
+    );
+    Ok(sources)
+}
+async fn ellis_native(client: &reqwest::Client, r: &Reference) -> Result<Vec<Daily>> {
     let url = "https://www.elliscountytx.gov/DocumentCenter/View/24311/110326-Election-Early-Voting-InPerson-Roster?bidId=";
     let raw = download(client, url, None).await?;
     let hash = format!("{:x}", Sha256::digest(&raw));

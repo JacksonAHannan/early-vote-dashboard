@@ -33,6 +33,78 @@ pub struct Report {
     pub schema_version: u32,
     pub generated_at: String,
     pub controls: Vec<Control>,
+    #[serde(skip)]
+    pub recovery: Option<Recovery>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Recovery {
+    pub schema_version: u32,
+    pub method: String,
+    pub observations: Vec<RecoveredObservation>,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RecoveredObservation {
+    pub supersedes_sha256: Vec<String>,
+    pub source: Daily,
+}
+impl Recovery {
+    fn load(root: &Path) -> Result<Option<Self>> {
+        let path = root.join("recovery/texas-20261025.json");
+        if !path.exists() {
+            return Ok(None);
+        }
+        let value: Self = serde_json::from_slice(&std::fs::read(path)?)?;
+        ensure!(
+            value.schema_version == 1 && !value.method.is_empty(),
+            "Invalid source recovery edition"
+        );
+        let mut keys = std::collections::BTreeSet::new();
+        for item in &value.observations {
+            let d = &item.source;
+            ensure!(
+                keys.insert((&d.county, d.date, d.cumulative)),
+                "Duplicate recovered observation"
+            );
+            ensure!(
+                matches!(d.date.year(), 2024 | 2026)
+                    && !d.county.is_empty()
+                    && !d.source.is_empty()
+                    && d.sha256.len() == 64
+                    && !d.counts.is_empty(),
+                "Invalid recovered source provenance"
+            );
+            ensure!(
+                item.supersedes_sha256.iter().all(|s| s.len() == 64),
+                "Invalid superseded source hash"
+            );
+        }
+        Ok(Some(value))
+    }
+    fn apply(&self, county: &str, sources: &[Daily]) -> Vec<Daily> {
+        let mut output = sources.to_vec();
+        for item in self
+            .observations
+            .iter()
+            .filter(|v| v.source.county == county)
+        {
+            let replacement = &item.source;
+            if let Some(current) = output.iter_mut().find(|d| {
+                d.county == county
+                    && d.date == replacement.date
+                    && d.cumulative == replacement.cumulative
+            }) {
+                // A later, unreviewed publisher revision is never silently replaced.
+                if item.supersedes_sha256.contains(&current.sha256) {
+                    *current = replacement.clone();
+                }
+            } else {
+                output.push(replacement.clone());
+            }
+        }
+        output.sort_by_key(|d| (d.date, d.cumulative));
+        output
+    }
 }
 
 // A documented integer reconciliation precision, never a percentage allowance.
@@ -52,7 +124,8 @@ impl Report {
     pub fn load(root: &Path) -> Result<Self> {
         let bytes = std::fs::read(root.join("data/completeness.json"))
             .context("Independent completion controls unavailable")?;
-        let report: Self = serde_json::from_slice(&bytes)?;
+        let mut report: Self = serde_json::from_slice(&bytes)?;
+        report.recovery = Recovery::load(root)?;
         ensure!(
             report.schema_version == 1,
             "Unsupported completion controls"
@@ -80,11 +153,15 @@ impl Report {
 
     /// Keep every usable dated observation. Completion controls establish zeros,
     /// not whole-county admission. Historical age alone cannot establish zeros.
-    pub fn sources(&self, _county: &str, sources: &[Daily]) -> Vec<Daily> {
+    pub fn sources(&self, county: &str, sources: &[Daily]) -> Vec<Daily> {
+        let sources = self
+            .recovery
+            .as_ref()
+            .map(|r| r.apply(county, sources))
+            .unwrap_or_else(|| sources.to_vec());
         sources
-            .iter()
+            .into_iter()
             .filter(|d| matches!(d.date.year(), 2024 | 2026))
-            .cloned()
             .map(|mut d| {
                 let expected = self
                     .control(&d.county, d.date)
@@ -102,7 +179,10 @@ impl Report {
 
     pub fn snapshot(&self, raw: &Snapshot, references: &[Reference]) -> Result<Snapshot> {
         let mut snapshot = raw.clone();
-        snapshot.completeness_sha256 = format!("{:x}", Sha256::digest(serde_json::to_vec(self)?));
+        snapshot.completeness_sha256 = format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&(self, &self.recovery))?)
+        );
         let refs: BTreeMap<_, _> = references.iter().map(|r| (r.id.as_str(), r)).collect();
         for c in &mut snapshot.counties {
             let r = refs.get(c.id.as_str()).context("No geographic reference")?;

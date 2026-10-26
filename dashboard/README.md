@@ -8,7 +8,7 @@ Rust scraper, analysis, scheduler and HTTP server. The Counties workspace compar
 
 Open **http://127.0.0.1:8741**. It starts with the saved snapshot and checks official sources immediately, then every hour while running. The browser reloads data once an hour; after a manual refresh, it checks completion only until that requested refresh finishes. Stop with Ctrl+C. No machine-wide service is installed.
 
-The default cutoff is yesterday in America/Chicago, capped at October 30, 2026. Equivalent calendar days are compared from October 19, 2026 and October 21, 2024. Partial current-day voting is excluded. Day controls select cumulative periods; Ellis publishes a cumulative workbook without per-voter dates, so earlier precinct cutoffs remain unavailable.
+The default cutoff is yesterday in America/Chicago, capped at October 30, 2026. Equivalent calendar days are compared from October 19, 2026 and October 21, 2024. Partial current-day voting is excluded. Day controls select cumulative periods. Ellis combines exact-cutoff native cumulative workbooks with independently dated SOS daily reports; later cumulative totals are never allocated backward.
 
 ```bash
 # One refresh, including new PNG/SVG/CSV exports
@@ -93,7 +93,7 @@ Demographic and primary regression views offer **All / Trump / Harris**2024winne
 Turnout regressions default to **Auto** vertical scaling across Texas precinct and added-state county views. With at least five points, a shared viewport rule uses Tukey 1.5 interquartile-range fences (with a one-percentage-point spread floor) to identify the central cluster, then adds padding, a minimum span and readable ticks. Smaller samples retain their full observed range. The percentage-share x axis stays at0–100%. **Full range** reveals all points; Texas also retains its optional60–150% band. A compact count marks observations outside the current view. Every eligible observation remains in OLS, sample size and Points CSV; this is a viewport rule, not an outlier exclusion from analysis. Keyboard navigation visits visible points. Changing the scale preserves selection, colors and the fitted cohort. The100% reference and quadrant backgrounds are clipped to the current domain.
 
 
-Ellis publishes a replaceable cumulative workbook. Each downloaded file keeps its actual filename cutoff. When it advances beyond the requested completed day, the refresh retains previously verified snapshots through that exact requested date (with original retrieval timestamps and hashes). A fresh correction wins for its own date. The later total is saved for later cutoffs, and never allocated backward to reconstruct missing days. An unavailable exact cutoff remains unavailable, and a genuinely failed download still retains last-good data with a stale warning.
+Ellis downloads the official dated SOS in-person reports for completed days, retaining each successful daily report alongside its replaceable native cumulative workbook. These recover earlier cutoffs that the rotating workbook cannot supply. A failed individual download does not discard the other observations. Each county workbook keeps its actual filename cutoff. When it advances beyond the requested completed day, the refresh retains previously verified snapshots through that exact requested date (with original retrieval timestamps and hashes). A fresh correction wins for its own date. The later total is saved for later cutoffs, and never allocated backward to reconstruct missing days. An unavailable exact cutoff remains unavailable, and a genuinely failed download still retains last-good data with a stale warning.
 
 
 The Travis current-election adapter discovers the roster ZIP from the official election page on each refresh. It accepts only the county's HTTPS uploads path and the matching election-year roster ZIP, including renamed versions such as `G26-Voter-Rosters-1.zip`. Workbook dates, headers, ordinary early-vote scope and voter deduplication are still checked after download. The selected URL and content hash are preserved in source provenance; a guessed filename or a genuine 404 cannot be accepted as current data.
@@ -306,3 +306,18 @@ Measure labels distinguish same-day and cumulative votes. Matrices, profiles, pr
 The matrix’s **Buckets × partisanship** layout offers the six Census composition metrics and Place type as row groupings. Place type adds the six categorical rows, including the residual, against every presidential-margin column; vote-weighted marginals and the tied/unknown presidential column remain intact.
 
 Interactive navigation now uses action-driven motion: state, county and precinct maps travel to their selected extent; section switches, panel expansion and changed chart comparisons transition briefly. Maps below the fold defer their entry zoom until visible. Motion is interrupted by newer selections, respects `prefers-reduced-motion` (including a preference change during travel), and settles before PNG capture. Hourly background updates do not trigger these reveals. The shared `static/motion.js` owns timing/camera lifecycle; `tests/motion.py` checks real intermediate camera frames, final extents, cancellation, reduced motion and exports against either Pages fixtures or the public website.
+
+
+Historical Days 1–5 coverage and the October 25 source recovery are documented in [the coverage audit](../sources/historical-coverage/findings.md). The versioned anonymous edition at `recovery/texas-20261025.json` replaces only the reviewed conflicting Harris archive hash and fills missing dated Ellis, Houston and Leon reports in retained caches. It preserves later unreviewed revisions. Both the native API and Pages exporter apply it before the existing independent completion checks, daily accumulation and geographic matching. Its fingerprint invalidates derived caches even when the raw snapshot timestamp is unchanged. The live Ellis collector now requests dated SOS reports; two historical duplicate exceptions accept one exact repeated row only for the reviewed file hashes.
+
+To independently audit each county/day from the API's anonymous source observations:
+
+```bash
+curl --fail http://127.0.0.1:8741/api/data -o /tmp/turnout-snapshot.json
+python3 dashboard/scripts/audit_precinct_coverage.py --snapshot /tmp/turnout-snapshot.json --output /tmp/turnout-coverage.json
+cargo test --locked --manifest-path dashboard/Cargo.toml --test historical_recovery
+# Optional: download the reviewed live reports into memory, with no voter records saved.
+cargo test --locked --manifest-path dashboard/Cargo.toml --test historical_recovery -- --ignored --nocapture
+```
+
+The audit reconciles every published cumulative pair, including wholly missing county-days. `--require-complete` additionally fails if any native precinct remains unpaired; real source gaps are expected to fail that stronger condition. Availability is separate from presidential/Census/primary classification. `tests/historical_coverage.py` checks all 1,075 county-days, recovered primary/demographic timelines against independently summed groups, future missingness and the actual browser/PNG; `TURNOUT_JOINT_STATIC=1` selects Pages transport.

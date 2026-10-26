@@ -5,6 +5,7 @@ TURNOUT_TEST_URL=http://127.0.0.1:8741 uv run --with playwright --with pillow py
 Set TURNOUT_MATRIX_SERVED=1 to verify deployed assets without routing local changes.
 """
 import json,math,os,traceback
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from PIL import Image
 from playwright.sync_api import sync_playwright,expect
@@ -15,7 +16,7 @@ TAG=os.environ.get('TURNOUT_TEST_TAG','local')
 OUT=ROOT/'analysis/matrix-total'/TAG;OUT.mkdir(parents=True,exist_ok=True)
 REPORT={'url':BASE,'served':SERVED,'checks':[],'javascript_errors':[]}
 def check_column(page):
- state=page.evaluate('({snapshot:{counties:data.counties.map(c=>({periods:c.periods.map(p=>({day:p.day,coverage:p.coverage,county_2024:p.county_2024,county_2026:p.county_2026,buckets:p.buckets}))}))},day,cohort,mode,demo:demoViews?.all?{bins:demoViews.all.bins}:null,rows:[...document.querySelectorAll("#matrix tbody tr")].map(r=>({text:r.querySelector(".matrix-total").textContent,title:r.querySelector(".matrix-total").title})),footer:[...document.querySelectorAll("#matrix tfoot .matrix-total")].map(e=>e.textContent)})')
+ state=page.evaluate('({snapshot:{counties:data.counties.map(c=>({reference_groups:c.reference_groups,periods:c.periods.map(p=>({day:p.day,coverage:p.coverage,county_2024:p.county_2024,county_2026:p.county_2026,buckets:p.buckets}))}))},day,cohort,mode,demo:demoViews?.all?{bins:demoViews.all.bins}:null,rows:[...document.querySelectorAll("#matrix tbody tr")].map(r=>({text:r.querySelector(".matrix-total").textContent,title:r.querySelector(".matrix-total").title})),footer:[...document.querySelectorAll("#matrix tfoot .matrix-total")].map(e=>e.textContent)})')
  periods=[p for c in state['snapshot']['counties'] for p in c['periods'] if p['day']==state['day'] and p.get('coverage',{}).get('available_groups',1)>0]
  if state['mode']=='partisan':
   bins=[{'groups':sum(p['buckets'][i][state['cohort']]['groups'] for p in periods),'votes_2024':sum(p['buckets'][i][state['cohort']]['votes_2024'] for p in periods),'votes_2026':sum(p['buckets'][i][state['cohort']]['votes_2026'] for p in periods)} for i in range(6)]
@@ -28,7 +29,7 @@ def check_column(page):
   assert f"{b['votes_2026']:,} / {b['votes_2024']:,} votes; {b['groups']} groups" in row['title'],(row,b)
  n=sum(p['county_2026'] for p in periods);o=sum(p['county_2024'] for p in periods)
  assert f'{n:,} / {o:,}' in state['footer'][0]
- assert state['footer'][1]==f"{sum(p['coverage']['available_precincts'] for p in periods):,} / {sum(p['coverage']['total_precincts'] for p in periods):,}"
+ assert state['footer'][1]==f"{sum(p['coverage']['available_precincts'] for p in periods):,} / {sum(len(g['new']) for c in state['snapshot']['counties'] for g in c['reference_groups']):,}"
  print(f"Verified {state['mode']} / {state['cohort']} / day {state['day']}",flush=True)
  return state['rows']
 def main():
@@ -78,7 +79,8 @@ def main():
    with page.expect_download(timeout=60000) as download:page.locator('[data-image="matrix"]').click()
    download.value.save_as(str(OUT/'matrix-full-export.png'))
    xml=page.evaluate('async()=>{const c=await Visuals.capture(Visuals.descriptor("matrix"));return decodeURIComponent(c.img.src.split(",").slice(1).join(","));}')
-   assert all(label in xml for label in headers),headers
+   export_text="".join(ET.fromstring(xml).itertext())
+   assert all(label in export_text for label in headers),headers
    page.locator('#matrix-search').fill('no such county qqq')
    expect(page.locator('#matrix thead th')).to_have_count(2)
    assert page.evaluate('()=>{const m=document.getElementById("matrix"),a=m.querySelector("th:first-child").getBoundingClientRect(),b=m.querySelector("th.matrix-total").getBoundingClientRect();return Math.abs(a.right-b.left)<1&&document.documentElement.scrollWidth<=innerWidth;}')

@@ -1,5 +1,7 @@
 # Texas adversarial source audit
 
+October 25 follow-up: [historical coverage recovery](../historical-coverage/findings.md) replaces the specifically conflicting Harris archive with independently reconciled whole SOS reports and repairs three additional source cases. The original quarantine evidence below remains the rationale for withholding zeros from the disputed archive.
+
 Checked 2026-10-24 America/Chicago against the immutable source archive frozen at `/tmp/turnout-texas-audit-20261025`. The repeatable read-only check is `dashboard/tests/texas_source_stress.py`; evidence is `analysis/texas-stress/source-audit-frozen.json`. Run:
 
 ```sh

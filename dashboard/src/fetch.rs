@@ -273,17 +273,19 @@ pub async fn fetch_state(
             .decode(encoded.rsplit(',').next().unwrap_or(encoded))
             .context("decode state CSV")?
     };
-    let identical_row_policy = match (reference.id.as_str(), date.to_string().as_str()) {
-        ("elpaso", "2024-10-22" | "2024-10-23") | ("nacogdoches" | "willacy", "2024-10-21") => 1,
-        ("willacy", "2024-10-23") => 2,
-        _ => 0,
-    };
+    let source_sha256 = format!("{:x}", Sha256::digest(&csv));
+    let identical_row_policy =
+        identical_row_policy(&reference.id, &date.to_string(), &source_sha256);
     let counts = parse_state_with_ambiguity(
         &csv,
         across_days,
         reference.id == "tarrant" && date == start(2024),
         identical_row_policy,
     )?;
+    let mut note = state_note(&reference.id, date);
+    if matches!(reference.id.as_str(), "houston" | "leon") && identical_row_policy > 0 {
+        note.push_str(" A reviewed hash-pinned repeated CSV record is counted once; differing records and additional duplicates still fail validation. Control shortfalls remain unknown rather than inferred zeros.");
+    }
     Ok(Daily {
         complete: false,
         county: reference.id.clone(),
@@ -297,11 +299,28 @@ pub async fn fetch_state(
         } else {
             url
         },
-        sha256: format!("{:x}", Sha256::digest(&csv)),
+        sha256: source_sha256,
         retrieved_at: Utc::now().to_rfc3339(),
-        note: state_note(&reference.id, date),
+        note,
         cumulative: false,
     })
+}
+fn identical_row_policy(county: &str, date: &str, sha256: &str) -> usize {
+    match (county, date) {
+        ("elpaso", "2024-10-22" | "2024-10-23") | ("nacogdoches" | "willacy", "2024-10-21") => 1,
+        ("willacy", "2024-10-23") => 2,
+        ("houston", "2024-10-25")
+            if sha256 == "1b662d55c21f7ee931ad8f089afeac273775d94657695231ca46db52fa78cb03" =>
+        {
+            1
+        }
+        ("leon", "2024-10-22")
+            if sha256 == "7cdf0400b0924e80d753655102f5b52d2d9bf868cd5a66e5d60e3a64b9662bf1" =>
+        {
+            1
+        }
+        _ => 0,
+    }
 }
 fn current_state_url(reference: &Reference, date: NaiveDate) -> Result<String> {
     let mut url = reqwest::Url::parse(
@@ -555,6 +574,25 @@ mod expanded_roster_tests {
         assert!(
             state_csv(b"ID_VOTER,VOTING_METHOD,PRECINCT\na,IN-PERSON,1\na,IN-PERSON,1\n").is_err()
         );
+    }
+    #[test]
+    fn historical_missing_dates_have_only_hash_pinned_exact_duplicate_exceptions() {
+        for (county, date, hash) in [
+            (
+                "houston",
+                "2024-10-25",
+                "1b662d55c21f7ee931ad8f089afeac273775d94657695231ca46db52fa78cb03",
+            ),
+            (
+                "leon",
+                "2024-10-22",
+                "7cdf0400b0924e80d753655102f5b52d2d9bf868cd5a66e5d60e3a64b9662bf1",
+            ),
+        ] {
+            assert_eq!(identical_row_policy(county, date, hash), 1);
+            assert_eq!(identical_row_policy(county, date, &"a".repeat(64)), 0);
+            assert_eq!(identical_row_policy(county, "2024-10-21", hash), 0);
+        }
     }
     #[test]
     fn scoped_identical_row_policy_does_not_allow_identifier_collisions() {
