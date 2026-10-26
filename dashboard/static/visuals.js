@@ -62,7 +62,7 @@ const Visuals=window.Visuals={
  ready(key){
   if(!data)return false;
   if(key.startsWith('county-')||key==='counties')return CountyView.ready()&&(!['county-table','county-trend','counties'].includes(key)||Tracking.stateReady());
-  if(key==='matrix'&&matrixLayout==='joint')return Boolean(jointReady()&&jointViews[county]?.partisan_matrix);
+  if(key==='matrix')return matrixReady();
   if(key==='daily'||key.startsWith('daily-'))return Boolean(Tracking.view&&Tracking.key===Tracking.signature());
   if(key==='map')return Boolean(Atlas.layer&&$('map-loading').hidden&&(mode==='partisan'||demoReady()));
   if(['profile','demographics','precinct-trend'].includes(key))return $('selection-panel').dataset.county===Atlas.county;
@@ -82,14 +82,14 @@ const Visuals=window.Visuals={
   else if(key==='profile'){desc.title=selectedTitle;desc.scope=title('selection-context');desc.nodes=[document.querySelector('.profile-grid')];desc.source='County / Texas SOS in-person reports · 2020 Census';desc.footer='Census figures describe residents; race and ethnicity categories can overlap.';desc.classification='Cumulative in-person turnout and resident composition';}
   else if(key==='demographics'){desc.title=`${selectedTitle} · Residents age 18+`;desc.scope=title('selection-context');desc.classification='2020 Census';desc.nodes=[$('demographic-profile')];desc.source='2020 Census PL 94-171 · TLC blocks assigned to 2026 precincts';desc.footer='Resident composition, not voter demographics. Categories overlap and are not additive.';}
   else if(key==='precinct-trend'){desc.title=`${selectedTitle} · ${document.querySelector('.trend-panel h3').textContent}`;desc.scope=title('selection-context');desc.nodes=[$('turnout-trend')];desc.legend=true;desc.classification='Cumulative in-person votes';desc.footer='Historical counts use the comparable geographic group where native precincts changed.';}
-  else if(key==='matrix'){desc.title=title('bucket-title');desc.nodes=[$('matrix')];desc.footer=`2026 / 2024 cumulative in-person votes · Counties ${title('matrix-page')}${$('matrix-search').value?' · Filter: '+$('matrix-search').value:''} · † fewer than 3 groups or 100 baseline votes · — unavailable.`;}
+  else if(key==='matrix'){desc.title=`${matrixBasis()} turnout · ${title('bucket-title')}`;desc.nodes=[$('matrix')];desc.footer=`${matrixBasis()} 2026 / 2024 in-person votes · Counties ${title('matrix-page')}${$('matrix-search').value?' · Filter: '+$('matrix-search').value:''} · † fewer than 3 groups or 100 baseline votes · — unavailable.`;}
   else if(key==='detail'||key==='bucket-bars'){desc.title=`${title('detail-name')} · Cumulative votes`;desc.nodes=[$('chart')];desc.scope=title('detail-totals');desc.footer='2024 and 2026 through the same early-voting day.';}
   else if(key==='precinct-table'){desc.title=title('detail-name')+' · Cumulative votes';desc.nodes=[document.querySelector('.group-scroll')];desc.scope=title('detail-totals');desc.table='precinct';desc.footer=`${$('search').value?`Filter: ${$('search').value} · `:''}Current page ${title('page')}; first 12 rows, in the current sort order.`;}
   else if(key==='county-table'){desc.title='Texas county turnout';desc.nodes=[document.querySelector('.county-scroll')];desc.scope=title('statewide-count');desc.table='county';desc.classification='Cumulative '+countyMethod.toLowerCase()+' votes';desc.footer=`${$('statewide-search').value?`Filter: ${$('statewide-search').value} · `:''}First 12 matching counties in the current sort order. County totals can differ from ordinary-precinct reports.`;}
   else if(key==='county-trend'||key==='counties'){desc.title=`${Tracking.stateCounty==='all'?'Texas':Tracking.state.counties.find(c=>c.id===Tracking.stateCounty)?.name} · ${Tracking.stateMeasure==='daily'?'Daily':'Cumulative'} turnout`;desc.nodes=[$('statewide-chart')];desc.scope='County totals';desc.classification=countyMethod+' votes';desc.legend=true;desc.note=title('statewide-note');desc.footer='Same reported geography in both years at each point; coverage can vary by day.';}
   else throw Error('Unknown visual');
   const isCounty=key.startsWith('county-')||key==='counties';
-  const stale=isCounty?[]:comparisonIssues().filter(c=>!['map','profile','demographics','precinct-trend'].includes(key)||Atlas.county==='all'||c.county===Atlas.county);
+  const stale=isCounty?[]:comparisonIssues(key==='matrix'?matrixCounties():data.counties).filter(c=>!['map','profile','demographics','precinct-trend'].includes(key)||Atlas.county==='all'||c.county===Atlas.county);
   if(stale.length)desc.note=[desc.note,`Day ${day}: ${coverageSummary(stale)}; displayed pairs use the same geography`].filter(Boolean).join(' · ');
   if(key==='map'&&Atlas.county==='all'){desc.source='2020 Census county boundaries · '+sources+(mode==='place'?' · NCES 2025 / 2020 Census':'');desc.footer='County overview of matched precincts, not whole-county turnout. Gray: unavailable or unclassified.';}
   if(key==='regression'&&mode==='place'){desc.classification=regressionPlace==='all'?'All place types':placeLabels[+regressionPlace];desc.note=[desc.note,'Dots: place type'].filter(Boolean).join(' · ');}
@@ -102,8 +102,9 @@ const Visuals=window.Visuals={
    desc.mode=jointMetric().unit==='category'?'place':'demographic';desc.classification=jointMetric().label+(jointMetric().denominator==='vap'?' · age 18+':'');
    desc.source=sources+' · 2020 Census PL 94-171'+(jointMetric().unit==='category'?' · NCES 2025':'')+' · 2024 presidential results';
    desc.note=[desc.note,title('matrix-context')].filter(Boolean).join(' · ');
-   desc.footer='2026 / 2024 cumulative in-person votes · † fewer than 3 groups or 100 baseline votes · — no baseline or unavailable.';
+   desc.footer=`${matrixBasis()} 2026 / 2024 in-person votes · † fewer than 3 groups or 100 baseline votes · — no baseline or unavailable.`;
   }
+  if(key==='matrix')desc.period=matrixDates();
   desc.static=key==='demographics'||key==='map'&&$('map-layer').value==='share';
   return desc;
  },

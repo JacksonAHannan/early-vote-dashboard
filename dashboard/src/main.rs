@@ -518,6 +518,48 @@ async fn demographic_view(
         ),
     }
 }
+async fn matrix_view(
+    State(app): State<App>,
+    Query(query): Query<DemographicQuery>,
+) -> impl IntoResponse {
+    let result = (|| -> Result<serde_json::Value> {
+        let snapshot = app.snapshot.try_read().context("snapshot busy; retry")?;
+        let references: Vec<Reference> =
+            serde_json::from_slice(&std::fs::read(app.root.join("data/reference.json"))?)?;
+        let mut history: trends::History =
+            serde_json::from_slice(&std::fs::read(app.root.join("data/history.json"))?)?;
+        quality::Report::load(&app.root)
+            .unwrap_or_default()
+            .history(&mut history);
+        let classification = match query.view.as_deref().unwrap_or("partisan") {
+            "partisan" => None,
+            "place" => Some(places::load(&app.root)?),
+            "demographic" => Some(serde_json::from_slice(&std::fs::read(
+                app.root.join("data/demographics.json"),
+            )?)?),
+            "primary" => Some(serde_json::from_slice(&std::fs::read(
+                demographics::primary_path(&app.root),
+            )?)?),
+            _ => anyhow::bail!("Unknown classification view"),
+        };
+        trends::matrix_view(
+            &snapshot,
+            &history,
+            &references,
+            classification.as_ref(),
+            query.day,
+            query.cohort.as_deref().unwrap_or("matched"),
+            &query.metric,
+        )
+    })();
+    match result {
+        Ok(value) => (StatusCode::OK, Json(value)),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error":error.to_string()})),
+        ),
+    }
+}
 async fn county_map(
     State(app): State<App>,
     AxumPath(county): AxumPath<String>,
@@ -645,6 +687,7 @@ async fn export(State(app): State<App>, Query(query): Query<Export>) -> impl Int
             "votes_2026",
             "ratio",
             "county_status",
+            "measure",
         ])
         .unwrap();
     let cohort = query.cohort.as_deref().unwrap_or("matched");
@@ -683,6 +726,7 @@ async fn export(State(app): State<App>, Query(query): Query<Export>) -> impl Int
                         c.votes_2026.to_string(),
                         c.ratio.map(|v| v.to_string()).unwrap_or_default(),
                         county.status.clone(),
+                        "cumulative".into(),
                     ])
                     .unwrap();
             }
@@ -972,6 +1016,7 @@ async fn main() -> Result<()> {
         .route("/api/places", get(place_data))
         .route("/api/demographics", get(demographic_data))
         .route("/api/demographic-view", get(demographic_view))
+        .route("/api/matrix-view", get(matrix_view))
         .route("/api/map/{county}", get(county_map))
         .route("/api/data", get(data))
         .route("/api/status", get(health))

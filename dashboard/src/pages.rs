@@ -232,6 +232,7 @@ pub fn build(root: &Path, out: &Path) -> Result<Summary> {
     quality::Report::load(root)
         .unwrap_or_default()
         .history(&mut history);
+    let references: Vec<Reference> = read(root, "data/reference.json")?;
     for cohort in ["matched", "unchanged"] {
         for (view, classification) in [
             ("partisan", None),
@@ -266,6 +267,26 @@ pub fn build(root: &Path, out: &Path) -> Result<Summary> {
                             ("county", county),
                         ],
                         &v,
+                    )?;
+                }
+                for day in 1..=snapshot.days {
+                    p.route(
+                        "/api/matrix-view",
+                        &[
+                            ("view", view),
+                            ("metric", metric),
+                            ("cohort", cohort),
+                            ("day", &day.to_string()),
+                        ],
+                        &trends::matrix_view(
+                            &snapshot,
+                            &history,
+                            &references,
+                            classification,
+                            day,
+                            cohort,
+                            metric,
+                        )?,
                     )?;
                 }
                 if let Some(classification) = classification {

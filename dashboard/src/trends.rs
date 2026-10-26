@@ -455,6 +455,65 @@ fn resolved_matching(
         .collect()
 }
 
+/// Daily matrix cells reuse the same per-precinct resolver as the timelines.
+/// In particular, aggregate cumulative differences cannot establish daily pairs.
+pub fn matrix_view(
+    snapshot: &Snapshot,
+    history: &History,
+    references: &[Reference],
+    classification: Option<&Data>,
+    day: u32,
+    cohort: &str,
+    metric: &str,
+) -> Result<serde_json::Value> {
+    ensure!((1..=snapshot.days).contains(&day), "unknown completed day");
+    ensure!(matches!(cohort, "matched" | "unchanged"), "unknown cohort");
+    let mut daily = snapshot.clone();
+    for c in &mut daily.counties {
+        let reference = references
+            .iter()
+            .find(|r| r.id == c.id)
+            .context("missing geographic reference")?;
+        let sources = merge_sources(
+            history
+                .counties
+                .get(&c.id)
+                .into_iter()
+                .flat_map(|h| h.sources.iter().cloned())
+                .chain(c.sources.iter().cloned()),
+        );
+        c.periods = crate::matching::period(reference, &sources, day, false)
+            .into_iter()
+            .collect();
+        c.sources.clear();
+    }
+    let mut views = serde_json::Map::new();
+    if let Some(classification) = classification {
+        for county in std::iter::once("all").chain(daily.counties.iter().map(|c| c.id.as_str())) {
+            views.insert(
+                county.into(),
+                serde_json::to_value(crate::demographics::analyze(
+                    &daily,
+                    classification,
+                    county,
+                    day,
+                    cohort,
+                    metric,
+                )?)?,
+            );
+        }
+    }
+    // Only matrix fields travel to the browser; reference membership is retained
+    // for the all-county coverage denominator, including unavailable counties.
+    let counties: Vec<_> = daily.counties.iter().map(|c| serde_json::json!({
+        "id":c.id,"name":c.name,"periods":c.periods,
+        "reference_groups":c.reference_groups.iter().map(|g| serde_json::json!({"new":g.new})).collect::<Vec<_>>()
+    })).collect();
+    Ok(
+        serde_json::json!({"generated_at":snapshot.generated_at,"measure":"daily","counties":counties,"views":views}),
+    )
+}
+
 pub fn analyze(
     snapshot: &Snapshot,
     history: &History,
@@ -896,6 +955,93 @@ mod tests {
             geography: "".into(),
             counties,
         }
+    }
+
+    #[test]
+    fn matrix_daily_pairs_do_not_subtract_changing_cumulative_geography() {
+        let reference = Reference {
+            id: "x".into(),
+            name: "X".into(),
+            state_id: 1,
+            groups: vec![
+                crate::Group {
+                    old: vec!["a".into()],
+                    new: vec!["a".into()],
+                },
+                crate::Group {
+                    old: vec!["b".into()],
+                    new: vec!["b".into()],
+                },
+            ],
+            exact_pairs: vec![["a".into(), "a".into()], ["b".into(), "b".into()]],
+            presidential: [
+                (
+                    "a".into(),
+                    crate::Party {
+                        harris: 80,
+                        trump: 20,
+                    },
+                ),
+                (
+                    "b".into(),
+                    crate::Party {
+                        harris: 20,
+                        trump: 80,
+                    },
+                ),
+            ]
+            .into(),
+            references: json!({}),
+        };
+        let sources = vec![
+            daily("x", 2024, 1, &[("a", 100), ("b", 200)], true),
+            daily("x", 2024, 2, &[("a", 120), ("b", 240)], true),
+            daily("x", 2026, 1, &[("a", 100), ("b", 200)], true),
+            // a has a downward revision; only b retains a valid daily change.
+            daily("x", 2026, 2, &[("a", 90), ("b", 260)], true),
+        ];
+        let mut c = county("x", vec![], sources.clone());
+        c.reference_groups = crate::analyze(&reference, &Counts::new(), &Counts::new(), 1)
+            .unwrap()
+            .groups;
+        let snapshot = snapshot(vec![c], 2);
+        let view = matrix_view(
+            &snapshot,
+            &History::default(),
+            std::slice::from_ref(&reference),
+            None,
+            2,
+            "matched",
+            "partisan",
+        )
+        .unwrap();
+        let period = &view["counties"][0]["periods"][0];
+        assert_eq!(period["county_2024"], 40);
+        assert_eq!(period["county_2026"], 60);
+        assert_eq!(period["coverage"]["available_groups"], 1);
+        assert_eq!(period["groups"][0]["available"], false);
+        assert_eq!(period["buckets"][5]["matched"]["ratio"], 1.5);
+        assert_eq!(snapshot.counties[0].sources.len(), 4);
+        assert!(
+            matrix_view(
+                &snapshot,
+                &History::default(),
+                &[reference],
+                None,
+                3,
+                "matched",
+                "partisan"
+            )
+            .is_err()
+        );
+        // A missing prior observation cannot be inferred from another precinct.
+        let mut partial = sources;
+        partial[2].counts.remove("b");
+        assert!(
+            !crate::matching::counts(&partial, 2026, 2, false)
+                .unwrap()
+                .contains_key("b")
+        );
     }
 
     #[test]

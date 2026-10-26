@@ -29,6 +29,23 @@ function groupRows(c){
 }
 function bucketsFor(c){const p=period(c);if(!p)return null;if(mode!=='partisan')return demoReady()?demoViews[c.id]?.bins:null;return p.buckets.map(b=>({label:b.label,...b[cohort]}));}
 let bucketUrl=null,regressionUrl=null,matrixLayout='counties',jointMetricId='hispanic_vap',jointViews=null,jointKey='',jointPending='';
+let matrixMeasure='cumulative',matrixDaily=null,matrixDailyKey='',matrixDailyPending='';
+const matrixDailySignature=()=>`${data?.generated_at}|${day}|${cohort}|${matrixLayout==='joint'?(jointMetricId==='place_type'?'place':'demographic'):mode}|${matrixLayout==='joint'?jointMetricId:(mode==='partisan'?'partisan':activeMetricId())}|${dataEpoch}`;
+const matrixDailyReady=()=>matrixDailyKey===matrixDailySignature()&&matrixDaily;
+const matrixReady=()=>matrixMeasure==='daily'?Boolean(matrixDailyReady()):matrixLayout==='joint'?Boolean(jointReady()):mode==='partisan'||Boolean(demoReady());
+const matrixCounties=()=>matrixMeasure==='daily'?matrixDaily.counties:data.counties;
+const matrixViews=()=>matrixMeasure==='daily'?matrixDaily.views:demoViews;
+const matrixPeriod=c=>{const p=c?.periods.find(p=>p.day===day);return p?.coverage?.available_groups===0?undefined:p;};
+const matrixBuckets=c=>{const p=matrixPeriod(c);if(!p)return null;return mode==='partisan'?p.buckets.map(b=>({label:b.label,...b[cohort]})):matrixViews()?.[c.id]?.bins;};
+const matrixBasis=()=>matrixMeasure==='daily'?'Same-day':'Cumulative';
+function matrixDates(){const p=comparisonPeriod();return matrixMeasure==='daily'?[p.through_2026,p.through_2024].map(iso=>new Date(iso+'T12:00:00Z').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'})).join(' / '):dates(p);}
+async function ensureMatrixDaily(){
+ const key=matrixDailySignature();if(matrixDailyReady()||matrixDailyPending===key)return;matrixDailyPending=key;
+ const view=matrixLayout==='joint'?(jointMetricId==='place_type'?'place':'demographic'):mode,metric=matrixLayout==='joint'?jointMetricId:mode==='partisan'?'partisan':activeMetricId();
+ try{const response=await fetch('/api/matrix-view?'+new URLSearchParams({day,cohort,view,metric})),value=await response.json();if(!response.ok)throw Error(value.error||'Same-day comparison unavailable');if(key!==matrixDailySignature()||matrixMeasure!=='daily')return;if(value.generated_at!==data.generated_at){await load();return;}matrixDaily=value;matrixDailyKey=key;renderMatrix();}
+ catch(error){if(key===matrixDailySignature()&&matrixMeasure==='daily'){$('matrix').innerHTML=`<div class="empty">${esc(error.message)}</div>`;}}
+ finally{if(matrixDailyPending===key)matrixDailyPending='';}
+}
 const classificationPending=new Map();
 const jointSignature=()=>`${data?.generated_at}|${day}|${cohort}|${jointMetricId}|${dataEpoch}`;
 const jointReady=()=>jointKey===jointSignature()&&jointViews;
@@ -73,8 +90,8 @@ function selectPoint(id,index,precinct=null,zoom=true){
  selection={county:id,group_index:index,precinct};page=0;Atlas.active={county:id,group_index:index};Atlas.native=precinct;
  render();if(!changed)Atlas.focus(id,index,precinct,zoom);
 }
-function comparisonIssues(){
- return data.counties.filter(c=>county==='all'||c.id===county).flatMap(c=>{
+function comparisonIssues(counties=data.counties){
+ return counties.filter(c=>county==='all'||c.id===county).flatMap(c=>{
   const p=c.periods.find(p=>p.day===day),cov=p?.coverage;
   const available=cov?.available_groups??p?.groups.filter(g=>g.available!==false).length??0;
   if(!p||!available)return [{county:c.id,name:c.name,kind:'unavailable',reason:`No complete paired precincts for Day ${day}`}];
@@ -99,7 +116,6 @@ function render(){
  const issues=comparisonIssues();$('source-errors').hidden=!issues.length;$('source-errors-summary').textContent=`Day ${day} coverage · ${coverageSummary(issues)}`;$('error').hidden=!issues.length;$('error').textContent=issues.map(c=>`${c.name}: ${c.reason}`).join(' · ');
  $('explore-scope').textContent=county==='all'?'Texas · matched precincts':`${data.counties.find(c=>c.id===county)?.name} County`;
  $('explore-period').textContent=`Cumulative in-person votes · ${dates(comparisonPeriod())}`;
- $('bucket-unit').textContent='Cumulative 2026 as % of 2024';
  renderMatrix();regression();detail();
  Tracking.update({data,day,county,cohort,mode,metric:activeMetricId(),label:metric()?.label});
  Atlas.update(atlasContext());
@@ -113,44 +129,47 @@ function render(){
 }
 function renderMatrix(){
  const joint=matrixLayout==='joint';
+ $('matrix-measure').value=matrixMeasure;$('bucket-unit').textContent=`${matrixBasis()} in-person · 2026 as % of 2024`;
+ $('matrix-period').textContent=`${matrixDates()} · Same precincts in each pair; coverage may differ by day and measure.`;
  $('matrix-layout').querySelectorAll('button').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.matrixLayout===matrixLayout)));
  $('matrix-metric').hidden=!joint;$('matrix-county-controls').hidden=joint;$('matrix-context').hidden=!joint;
- $('matrix').setAttribute('aria-label',joint?'Turnout by demographic and partisan precinct buckets':'County turnout by precinct bucket');
+ $('matrix').setAttribute('aria-label',`${matrixBasis()} in-person turnout · ${joint?'Demographic × partisan precinct buckets':'County precinct buckets'}`);
+ if(matrixMeasure==='daily'&&!matrixDailyReady()){downloadReady('download',false);$('matrix').innerHTML='<div class="empty">Loading same-day comparison…</div>';ensureMatrixDaily();return;}
  if(joint){renderJointMatrix();return;}
  $('bucket-title').textContent=mode!=='partisan'?`${metric()?.label||'Census'} precinct buckets`:'2024 presidential margin';
- const allVisible=data.counties.filter(c=>county==='all'||c.id===county),query=$('matrix-search').value.trim().toLowerCase(),filtered=allVisible.filter(c=>c.name.toLowerCase().includes(query)),size=12;matrixPage=Math.min(matrixPage,Math.max(0,Math.ceil(filtered.length/size)-1));const visible=filtered.slice(matrixPage*size,(matrixPage+1)*size);$('matrix-page').textContent=filtered.length?`${matrixPage*size+1}–${Math.min((matrixPage+1)*size,filtered.length)} of ${filtered.length}`:'0 counties';$('matrix-previous').disabled=matrixPage===0;$('matrix-next').disabled=(matrixPage+1)*size>=filtered.length;
- if(mode!=='partisan'&&!demoReady()){downloadReady('download',false);$('matrix').innerHTML='<div class="empty">Loading comparison…</div>';return;}
- const labels=mode!=='partisan'?(demoViews.all?.bins||[]).map(b=>b.label):['Harris 30+','Harris 15–30','Harris 0–15','Trump 0–15','Trump 15–30','Trump 30+'];
- const periods=data.counties.map(period).filter(Boolean),sum=key=>periods.reduce((total,p)=>total+(p[key]||0),0),total2024=sum('county_2024'),total2026=sum('county_2026');
- const totalBins=mode!=='partisan'?demoViews.all?.bins:labels.map((label,i)=>{const b={label,groups:0,votes_2024:0,votes_2026:0};for(const c of data.counties){const source=bucketsFor(c)?.[i];if(source)for(const key of ['groups','votes_2024','votes_2026'])b[key]+=source[key];}return {...b,ratio:b.votes_2024>0?b.votes_2026/b.votes_2024:null};});
+ const allVisible=matrixCounties().filter(c=>county==='all'||c.id===county),query=$('matrix-search').value.trim().toLowerCase(),filtered=allVisible.filter(c=>c.name.toLowerCase().includes(query)),size=12;matrixPage=Math.min(matrixPage,Math.max(0,Math.ceil(filtered.length/size)-1));const visible=filtered.slice(matrixPage*size,(matrixPage+1)*size);$('matrix-page').textContent=filtered.length?`${matrixPage*size+1}–${Math.min((matrixPage+1)*size,filtered.length)} of ${filtered.length}`:'0 counties';$('matrix-previous').disabled=matrixPage===0;$('matrix-next').disabled=(matrixPage+1)*size>=filtered.length;
+ if(mode!=='partisan'&&matrixMeasure==='cumulative'&&!demoReady()){downloadReady('download',false);$('matrix').innerHTML='<div class="empty">Loading comparison…</div>';return;}
+ const labels=mode!=='partisan'?(matrixViews().all?.bins||[]).map(b=>b.label):['Harris 30+','Harris 15–30','Harris 0–15','Trump 0–15','Trump 15–30','Trump 30+'];
+ const periods=matrixCounties().map(matrixPeriod).filter(Boolean),sum=key=>periods.reduce((total,p)=>total+(p[key]||0),0),total2024=sum('county_2024'),total2026=sum('county_2026');
+ const totalBins=mode!=='partisan'?matrixViews().all?.bins:labels.map((label,i)=>{const b={label,groups:0,votes_2024:0,votes_2026:0};for(const c of matrixCounties()){const source=matrixBuckets(c)?.[i];if(source)for(const key of ['groups','votes_2024','votes_2026'])b[key]+=source[key];}return {...b,ratio:b.votes_2024>0?b.votes_2026/b.votes_2024:null};});
  const totalCoverage=periods.length&&periods.every(p=>p.coverage)?periods.reduce((all,p)=>{for(const key of ['available_precincts','total_precincts','baseline_votes_2024','available_baseline_votes_2024'])all[key]+=p.coverage[key];return all;},{available_precincts:0,total_precincts:0,baseline_votes_2024:0,available_baseline_votes_2024:0}):null;
  // Coverage includes mapped counties with no usable pair on this day.
- if(totalCoverage)totalCoverage.total_precincts=data.counties.reduce((n,c)=>n+c.reference_groups.reduce((m,g)=>m+g.new.length,0),0);
+ if(totalCoverage)totalCoverage.total_precincts=matrixCounties().reduce((n,c)=>n+c.reference_groups.reduce((m,g)=>m+g.new.length,0),0);
  const totalPeriod=periods.length?{county_2024:total2024,county_2026:total2026,county_ratio:total2024>0?total2026/total2024:null,coverage:totalCoverage,[cohort]:{votes_2024:periods.reduce((n,p)=>n+p[cohort].votes_2024,0)}}:null;
- const columns=[{id:'all',name:'All Counties',total:true,bins:totalBins,period:totalPeriod},...visible.map(c=>({...c,bins:bucketsFor(c),period:period(c)}))];
- let html=`<table style="min-width:calc(var(--matrix-label-width) + var(--matrix-total-width) + ${visible.length*100}px);${visible.length?'':'width:calc(var(--matrix-label-width) + var(--matrix-total-width));'}"><thead><tr><th>${mode!=='partisan'?esc(metric()?.label||'Share')+(mode==='place'?'':' (%)'):'2024 margin (pp)'}</th>`+columns.map(c=>c.total?'<th class="matrix-total" scope="col">All Counties</th>':`<th><button data-county="${c.id}" aria-label="View ${esc(c.name)} precincts">${esc(c.name)}</button>${comparisonIssues().some(issue=>issue.county===c.id)?'<span class="stale">Coverage note</span>':''}</th>`).join('')+'</tr></thead><tbody>';
+ const columns=[{id:'all',name:'All Counties',total:true,bins:totalBins,period:totalPeriod},...visible.map(c=>({...c,bins:matrixBuckets(c),period:matrixPeriod(c)}))];
+ let html=`<table style="min-width:calc(var(--matrix-label-width) + var(--matrix-total-width) + ${visible.length*100}px);${visible.length?'':'width:calc(var(--matrix-label-width) + var(--matrix-total-width));'}"><thead><tr><th>${mode!=='partisan'?esc(metric()?.label||'Share')+(mode==='place'?'':' (%)'):'2024 margin (pp)'}</th>`+columns.map(c=>c.total?'<th class="matrix-total" scope="col">All Counties</th>':`<th><button data-county="${c.id}" aria-label="View ${esc(c.name)} precincts">${esc(c.name)}</button>${comparisonIssues(matrixCounties()).some(issue=>issue.county===c.id)?'<span class="stale">Coverage note</span>':''}</th>`).join('')+'</tr></thead><tbody>';
  labels.forEach((label,i)=>{const bg=mode==='place'?placeColors[i]:mode==='partisan'?colors[i]:mode==='primary'?primaryColors[i%5]:demoColors[i%5],dark=mode==='place'?i!==5:mode==='partisan'?(i===0||i===5):mode==='primary'?(i===0||i===4):i===4;html+=`<tr><td class="band" style="background:${bg};color:${dark?'white':'#17212b'}">${esc(label)}</td>`;
   for(const c of columns){const b=c.bins?.[i];if(!b){html+=`<td class="missing${c.total?' matrix-total':''}" title="No complete precinct data for this cutoff">—</td>`;continue;}
-   const title=`${c.name}, ${label}: ${number(b.votes_2026)} / ${number(b.votes_2024)} votes; ${b.groups} groups`,ratio=`<span class="ratio">${percent(b.ratio)}${b.ratio!==null&&small(b)?'†':''}</span>`;
+   const title=`${matrixBasis()} · ${matrixDates()} · ${c.name}, ${label}: ${number(b.votes_2026)} / ${number(b.votes_2024)} votes; ${b.groups} groups`,ratio=`<span class="ratio">${percent(b.ratio)}${b.ratio!==null&&small(b)?'†':''}</span>`;
    html+=c.total?`<td class="matrix-total" title="${esc(title)}">${ratio}</td>`:`<td><button data-cell="${c.id}:${i}" class="${selected===c.id&&bucket===i?'selected':''}" aria-label="${esc(title)}" title="${esc(title)}">${ratio}</button></td>`;
   }html+='</tr>';
  });
- html+='</tbody><tfoot><tr><td>Matched cumulative votes<br>2026 / 2024</td>'+columns.map(c=>{const p=c.period,cls=c.total?' class="matrix-total"':'';return p?`<td${cls}><b>${percent(p.county_ratio)}</b>${number(p.county_2026)} / ${number(p.county_2024)}</td>`:`<td${cls}>Unavailable</td>`;}).join('')+'</tr><tr><td>Matched precincts</td>'+columns.map(c=>{const p=c.period,covered=mode!=='partisan'?demoViews?.[c.id]?.coverage.included.votes_2024:p?.[cohort].votes_2024;return `<td${c.total?' class="matrix-total"':''} title="${p?.coverage?esc(percent(p.coverage.baseline_votes_2024>0?p.coverage.available_baseline_votes_2024/p.coverage.baseline_votes_2024:null)+' of available 2024 baseline votes'):'Classified baseline vote coverage'}">${p?.coverage?number(p.coverage.available_precincts)+' / '+number(p.coverage.total_precincts):p?percent(covered/p.county_2024):'—'}</td>`;}).join('')+'</tr></tfoot></table>';
- $('matrix').innerHTML=html;Motion.chart($('matrix'),[matrixLayout,day,county,cohort,mode,activeMetricId(),jointMetricId,matrixPage,$('matrix-search').value,dataEpoch].join('|'));
+ html+=`</tbody><tfoot><tr><td>Matched ${matrixBasis().toLowerCase()} votes<br>2026 / 2024</td>`+columns.map(c=>{const p=c.period,cls=c.total?' class="matrix-total"':'';return p?`<td${cls}><b>${percent(p.county_ratio)}</b>${number(p.county_2026)} / ${number(p.county_2024)}</td>`:`<td${cls}>Unavailable</td>`;}).join('')+'</tr><tr><td>Matched precincts</td>'+columns.map(c=>{const p=c.period,covered=mode!=='partisan'?matrixViews()?.[c.id]?.coverage.included.votes_2024:p?.[cohort].votes_2024;return `<td${c.total?' class="matrix-total"':''} title="${p?.coverage?esc(percent(p.coverage.baseline_votes_2024>0?p.coverage.available_baseline_votes_2024/p.coverage.baseline_votes_2024:null)+' of available 2024 baseline votes'):'Classified baseline vote coverage'}">${p?.coverage?number(p.coverage.available_precincts)+' / '+number(p.coverage.total_precincts):p?percent(covered/p.county_2024):'—'}</td>`;}).join('')+'</tr></tfoot></table>';
+ $('matrix').innerHTML=html;Motion.chart($('matrix'),[matrixLayout,matrixMeasure,day,county,cohort,mode,activeMetricId(),jointMetricId,matrixPage,$('matrix-search').value,dataEpoch].join('|'));
  $('matrix').querySelectorAll('[data-county]').forEach(b=>b.onclick=()=>selectDetail(b.dataset.county));$('matrix').querySelectorAll('[data-cell]').forEach(b=>b.onclick=()=>{const [c,i]=b.dataset.cell.split(':');selectDetail(c,+i);});
- if(mode==='partisan'){$('download').href=`/api/export.csv?day=${day}&cohort=${cohort}&county=${county}`;$('download').removeAttribute('download');downloadReady('download',true);}
- else{const rows=[['county','through_2026','through_2024','metric','bucket','cohort','groups','votes_2024','votes_2026','ratio']];for(const c of allVisible)for(const b of bucketsFor(c)||[])rows.push([c.name,period(c)?.through_2026,period(c)?.through_2024,activeMetricId(),b.label,cohort,b.groups,b.votes_2024,b.votes_2026,b.ratio]);bucketUrl=csvLink('download',rows,`${mode}-buckets-${activeMetricId()}-day-${day}.csv`,bucketUrl);}
+ if(mode==='partisan'&&matrixMeasure==='cumulative'){$('download').href=`/api/export.csv?day=${day}&cohort=${cohort}&county=${county}`;$('download').removeAttribute('download');downloadReady('download',true);}
+ else{const rows=[['county','through_2026','through_2024','metric','bucket','cohort','groups','votes_2024','votes_2026','ratio','measure']];for(const c of allVisible)for(const b of matrixBuckets(c)||[])rows.push([c.name,matrixPeriod(c)?.through_2026,matrixPeriod(c)?.through_2024,mode==='partisan'?'partisan':activeMetricId(),b.label,cohort,b.groups,b.votes_2024,b.votes_2026,b.ratio,matrixMeasure]);bucketUrl=csvLink('download',rows,`${mode}-buckets${mode==='partisan'?'':'-'+activeMetricId()}-${matrixMeasure}-day-${day}.csv`,bucketUrl);}
 }
 function renderJointMatrix(){
  $('bucket-title').textContent=jointMetric()?.unit==='category'?'Place types × partisanship':'Demographics × partisanship';
  $('matrix-context').textContent='';
  if(!census){downloadReady('download',false);$('matrix').innerHTML='<div class="empty">Census data unavailable</div>';return;}
- if(!jointReady()){downloadReady('download',false);$('matrix').innerHTML='<div class="empty">Loading comparison…</div>';ensureJoint();return;}
- const view=jointViews[county],matrix=view?.partisan_matrix,m=jointMetric();
+ if(matrixMeasure==='cumulative'&&!jointReady()){downloadReady('download',false);$('matrix').innerHTML='<div class="empty">Loading comparison…</div>';ensureJoint();return;}
+ const view=(matrixMeasure==='daily'?matrixDaily.views:jointViews)[county],matrix=view?.partisan_matrix,m=jointMetric();
  if(!matrix){downloadReady('download',false);$('matrix').innerHTML='<div class="empty">Joint comparison unavailable from this publication</div>';return;}
  const metricLabel=m.label+(m.denominator==='vap'&&m.unit!=='category'?' age 18+':''),total=view.coverage.included;
  const cell=(value,label,pooled=false)=>{
-  const title=`${label}: ${number(value.votes_2026)} / ${number(value.votes_2024)} votes; ${number(value.groups)} groups`;
+  const title=`${matrixBasis()} · ${matrixDates()} · ${label}: ${number(value.votes_2026)} / ${number(value.votes_2024)} votes; ${number(value.groups)} groups`;
   let background='';
   if(!pooled&&Number.isFinite(value.ratio)){
    const strength=Math.min(1,Math.abs(value.ratio-1)/.3),tint=value.ratio<1?[164,62,24]:[0,104,115];
@@ -165,13 +184,13 @@ function renderJointMatrix(){
  let html=`<table class="joint-table" style="min-width:calc(var(--matrix-label-width) + var(--matrix-total-width) + ${matrix.columns.length*110}px)"><thead><tr><th scope="col">${esc(metricLabel)}${m.unit==='category'?'':' (%)'}</th><th class="matrix-total" scope="col">All</th>`+matrix.columns.map((label,i)=>`<th scope="col" style="border-bottom:3px solid ${colors[i]||'#a6afbc'}">${esc(label)}</th>`).join('')+'</tr></thead><tbody>';
  view.bins.forEach((bin,i)=>{html+=`<tr><th class="joint-row" scope="row">${esc(bin.label)}</th>`+cell(bin,`${metricLabel} ${bin.label}, all partisan bands`,true)+matrix.cells[i].map((value,j)=>cell(value,`${metricLabel} ${bin.label}, ${matrix.columns[j]}`)).join('')+'</tr>';});
  html+='</tbody><tfoot><tr><th class="joint-row" scope="row">All</th>'+cell(total,'All row and partisan buckets',true)+matrix.totals.map((value,j)=>cell(value,`All row buckets, ${matrix.columns[j]}`)).join('')+'</tr></tfoot></table>';
- $('matrix').innerHTML=html;Motion.chart($('matrix'),[matrixLayout,day,county,cohort,mode,activeMetricId(),jointMetricId,matrixPage,$('matrix-search').value,dataEpoch].join('|'));
+ $('matrix').innerHTML=html;Motion.chart($('matrix'),[matrixLayout,matrixMeasure,day,county,cohort,mode,activeMetricId(),jointMetricId,matrixPage,$('matrix-search').value,dataEpoch].join('|'));
  const counties=new Set(view.points.map(point=>point.county)).size;
  $('matrix-context').textContent=`${number(total.groups)} precinct groups · ${number(counties)} ${counties===1?'county':'counties'}`;
  $('matrix-context').title=`${number(view.coverage.missing_demographics.groups+view.coverage.invalid_demographics.groups+view.coverage.zero_denominator.groups)} groups lack usable Census counts. Partisan bands use the combined 2024 presidential margin of each compared group. Tied or missing returns remain in their own column.`;
- const dates=comparisonPeriod(),rows=[['county_scope','through_2026','through_2024','metric','cohort','demographic_bucket','partisan_bucket','groups','votes_2024','votes_2026','ratio']];
- view.bins.forEach((bin,i)=>matrix.cells[i].forEach((value,j)=>rows.push([county,dates.through_2026,dates.through_2024,jointMetricId,cohort,bin.label,matrix.columns[j],value.groups,value.votes_2024,value.votes_2026,value.ratio])));
- bucketUrl=csvLink('download',rows,`demographic-partisan-${jointMetricId}-${county}-day-${day}-${cohort}.csv`,bucketUrl);
+ const dates=comparisonPeriod(),rows=[['county_scope','through_2026','through_2024','metric','cohort','demographic_bucket','partisan_bucket','groups','votes_2024','votes_2026','ratio','measure']];
+ view.bins.forEach((bin,i)=>matrix.cells[i].forEach((value,j)=>rows.push([county,dates.through_2026,dates.through_2024,jointMetricId,cohort,bin.label,matrix.columns[j],value.groups,value.votes_2024,value.votes_2026,value.ratio,matrixMeasure])));
+ bucketUrl=csvLink('download',rows,`demographic-partisan-${jointMetricId}-${county}-${matrixMeasure}-day-${day}-${cohort}.csv`,bucketUrl);
 }
 function detail(){
  if(county==='all'){$('detail').hidden=true;return;}
@@ -232,6 +251,7 @@ function regression(){
 }
 // Qualification can change without a new source snapshot timestamp.
 function invalidateComparisonViews(){
+ matrixDailyKey='';matrixDaily=null;
  dataEpoch++;demoKey='';demoViews=null;jointKey='';jointViews=null;classificationPending.clear();
  if(window.Tracking){Tracking.key='';Tracking.stateKey='';}
  if(window.CountyView)CountyView.key='';
@@ -249,6 +269,7 @@ $('place-mode').onclick=()=>{mode='place';bucket=null;page=0;updateView();};
 $('regression-place').onchange=e=>{regressionPlace=e.target.value;regression();Atlas.repaint();};
 $('regression-scale').onchange=()=>regression();
 $('regression-winner').onclick=event=>{const button=event.target.closest('[data-regression-winner]');if(button){regressionWinner=button.dataset.regressionWinner;regression();}};
+$('matrix-measure').onchange=e=>{matrixMeasure=e.target.value;renderMatrix();};
 $('matrix-layout').onclick=event=>{const button=event.target.closest('[data-matrix-layout]');if(button){matrixLayout=button.dataset.matrixLayout;renderMatrix();}};
 $('matrix-metric').onchange=event=>{jointMetricId=event.target.value;renderMatrix();};
 $('matrix-search').oninput=()=>{matrixPage=0;renderMatrix();};$('matrix-previous').onclick=()=>{matrixPage--;renderMatrix();};$('matrix-next').onclick=()=>{matrixPage++;renderMatrix();};
