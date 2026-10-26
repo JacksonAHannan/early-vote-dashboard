@@ -9,7 +9,7 @@ OUT=Path(__file__).resolve().parents[2]/'analysis/social-images/qa';OUT.mkdir(pa
 images=[];filenames=[]
 def inspect_png(path):
  with Image.open(path) as image:
-  assert image.format=='PNG' and image.size==(1600,1000),(path,image.format,image.size)
+  assert image.format=='PNG' and (image.width == 1600 and 800 <= image.height <= 2000),(path,image.format,image.size)
   assert image.convert('RGBA').getpixel((0,0))[3]==255
   colors=Counter(image.convert('RGB').get_flattened_data())
   assert sum(n for color,n in colors.items() if max(color)-min(color)>35)>100,(path,'missing colored data')
@@ -109,5 +109,5 @@ with sync_playwright() as p:
  # Storage restrictions must not disable the controls.
  private=browser.new_page();private.on('pageerror',lambda error:errors.append(str(error)));private.add_init_script("Object.defineProperty(window,'localStorage',{get(){throw new Error('Storage blocked')}})");private.goto(BASE,wait_until='networkidle');private.wait_for_function('window.Visuals&&Tracking.view');private.locator('[data-panels="collapse"]').click();assert private.locator('[data-collapsible].is-collapsed').count()==3;private.locator('[data-panels="expand"]').click();assert private.locator('[data-collapsible].is-collapsed').count()==0;private.close()
  assert not errors,errors
- report={'status':'passed','png_size':[1600,1000],'visual_downloads':images,'javascript_errors':errors,'checks':['nine keyboard-accessible panel folds across workspaces','map camera retained across individual/bulk collapse','all 17 visual downloads','PNG header/dimensions/opaque background/data pixels','all five Census bars visible','table body and last row visible','SVG map transforms and clipping retained','dynamic view changes retain actions','current demographic/measure and source in image','filtered county table','full matrix columns on mobile','export context frozen across filter changes','controls work with blocked storage','desktop/tablet/mobile no overflow']}
+ report={'status':'passed','png_width':1600,'png_height_range':[800,2000],'visual_downloads':images,'javascript_errors':errors,'checks':['nine keyboard-accessible panel folds across workspaces','map camera retained across individual/bulk collapse','all 17 visual downloads','PNG header/dimensions/opaque background/data pixels','all five Census bars visible','table body and last row visible','SVG map transforms and clipping retained','dynamic view changes retain actions','current demographic/measure and source in image','filtered county table','full matrix columns on mobile','export context frozen across filter changes','controls work with blocked storage','desktop/tablet/mobile no overflow']}
  (OUT/'visuals-verification.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2));browser.close()

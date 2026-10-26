@@ -50,7 +50,7 @@ def png(page, selector, name):
     path = OUT / (name + ".png")
     event.value.save_as(path)
     with Image.open(path) as image:
-        assert image.size == (1600, 1000)
+        assert (image.width == 1600 and 800 <= image.height <= 2000)
         assert image.convert("RGB").getextrema() != ((255, 255),) * 3
     record("actual regression PNG downloaded", image=name, seconds=round(time.monotonic()-started,2))
 

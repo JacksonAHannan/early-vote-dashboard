@@ -182,7 +182,7 @@ with sync_playwright() as p:
     real_png = OUT / 'qualified-county-buckets.png'
     download.value.save_as(str(real_png))
     with Image.open(real_png) as image:
-        assert image.size == (1600, 1000) and image.format == 'PNG'
+        assert (image.width == 1600 and 800 <= image.height <= 2000) and image.format == 'PNG'
 
     # Deliberately asymmetric anonymous fixture proves masking at the UI boundary.
     # A valid daily zero survives; valid cumulative-only points remain independent.
@@ -219,7 +219,7 @@ with sync_playwright() as p:
     png = OUT / 'incomplete-county.png'
     download.value.save_as(str(png))
     with Image.open(png) as image:
-        assert image.size == (1600, 1000) and image.format == 'PNG'
+        assert (image.width == 1600 and 800 <= image.height <= 2000) and image.format == 'PNG'
     captured = page.evaluate('''async()=>{const c=await Visuals.capture(Visuals.descriptor('county-trend'));return decodeURIComponent(c.img.src.split(',').slice(1).join(','));}''')
     assert 'data-day="5"' not in captured and 'data-day="6"' in captured
     page.evaluate('Tracking.state=window.savedState;Tracking.renderState()')

@@ -222,34 +222,44 @@ const Visuals=window.Visuals={
  async compose(capture,desc){
   await document.fonts.ready;
   if(!(capture.width>0&&capture.height>0))throw Error('The visual has no drawable area');
-  const canvas=document.createElement('canvas');canvas.width=1600;canvas.height=1000;
+  const canvas=document.createElement('canvas');canvas.width=1600;
   const ctx=canvas.getContext('2d'),style=getComputedStyle(document.body),token=(name,fallback)=>style.getPropertyValue(name).trim()||fallback;
   const paper=token('--brand-paper','#dbeaf2'),ink=token('--ink','#211b1b'),muted=token('--muted','#586772'),brand=token('--brand-accent','#743b42'),rule=token('--rule','#9db4c1');
-  ctx.fillStyle=paper;ctx.fillRect(0,0,1600,1000);ctx.fillStyle=brand;ctx.fillRect(0,0,1600,76);
+  // Fit the frame to the complete capture, rather than fitting a narrow chart
+  // into an oversized landscape surface. Text is measured before canvas sizing,
+  // which resets the context. Both organic platforms accept these aspect ratios.
+  ctx.font='bold 40px Arial,sans-serif';const titles=this.wrapText(ctx,desc.title,1504);
+  ctx.font='22px Arial,sans-serif';
+  const context=[desc.scope,desc.classification,desc.cohortLabel,desc.static||desc.day==null?'':`Day ${desc.day}`].filter(Boolean).join(' · ');
+  const contexts=this.wrapText(ctx,context,1504),periods=!desc.static&&desc.period?this.wrapText(ctx,desc.period,1504):[];
+  ctx.font='19px Arial,sans-serif';const notes=this.wrapText(ctx,[desc.note,desc.footer].filter(Boolean).join(' · '),1504);
+  ctx.font='18px Arial,sans-serif';const sources=this.wrapText(ctx,'Source: '+desc.source,1504);
+  const plotTop=128+titles.length*47+(contexts.length+periods.length)*28+(desc.legend?29:0)+7;
+  const belowPlot=20+notes.length*24+13+sources.length*23+17+86;
+  const naturalHeight=plotTop+24+capture.height*1472/capture.width+belowPlot;
+  canvas.height=Math.max(800,Math.min(2000,Math.ceil(naturalHeight)));
+  ctx.fillStyle=paper;ctx.fillRect(0,0,1600,canvas.height);ctx.fillStyle=brand;ctx.fillRect(0,0,1600,76);
   let authorX=48;const portrait=$('brand-portrait');
   if(portrait){try{await portrait.decode();ctx.drawImage(portrait,48,14,48,48);authorX=112;}catch(_){/* Plain-text identity remains complete if the portrait fails. */}}
   ctx.fillStyle='#fff';ctx.font='bold 27px Arial,sans-serif';ctx.fillText(this.social.name,authorX,49);
   ctx.font='22px Arial,sans-serif';const masthead='EARLY VOTE · 2026';ctx.fillText(masthead,1552-ctx.measureText(masthead).width,48);
   ctx.fillStyle=ink;ctx.font='bold 40px Arial,sans-serif';let top=128;
-  for(const line of this.wrapText(ctx,desc.title,1504)){ctx.fillText(line,48,top);top+=47;}
+  for(const line of titles){ctx.fillText(line,48,top);top+=47;}
   ctx.fillStyle=muted;ctx.font='22px Arial,sans-serif';
-  const context=[desc.scope,desc.classification,desc.cohortLabel,desc.static||desc.day==null?'':`Day ${desc.day}`].filter(Boolean).join(' · ');
-  for(const line of this.wrapText(ctx,context,1504)){ctx.fillText(line,48,top-9);top+=28;}
-  if(!desc.static&&desc.period){for(const line of this.wrapText(ctx,desc.period,1504)){ctx.fillText(line,48,top-9);top+=28;}}
+  for(const line of contexts){ctx.fillText(line,48,top-9);top+=28;}
+  for(const line of periods){ctx.fillText(line,48,top-9);top+=28;}
   if(desc.legend){const y=top-5;for(const [i,year,color]of [[0,2024,'#8d9aab'],[1,2026,desc.legendColor||ink]]){const x=48+i*145;ctx.strokeStyle=color;ctx.lineWidth=3;ctx.setLineDash(i?[]:[7,5]);ctx.beginPath();ctx.moveTo(x,y-6);ctx.lineTo(x+30,y-6);ctx.stroke();ctx.setLineDash([]);ctx.fillText(String(year),x+40,y);}top+=29;}
   top+=7;
-  ctx.font='19px Arial,sans-serif';const notes=this.wrapText(ctx,[desc.note,desc.footer].filter(Boolean).join(' · '),1504);
-  ctx.font='18px Arial,sans-serif';const sources=this.wrapText(ctx,'Source: '+desc.source,1504);
-  const footerTop=914,sourceTop=footerTop-17-sources.length*23,noteTop=sourceTop-13-notes.length*24,plotBottom=noteTop-20,available=plotBottom-top;
+  const footerTop=canvas.height-86,sourceTop=footerTop-17-sources.length*23,noteTop=sourceTop-13-notes.length*24,plotBottom=noteTop-20,available=plotBottom-top;
   if(available<170)throw Error('This visual has too much context for a share image. Export a focused panel.');
   ctx.fillStyle='#fff';ctx.fillRect(48,top,1504,available);ctx.strokeStyle=rule;ctx.lineWidth=1;ctx.strokeRect(48.5,top+.5,1503,available-1);
   const scale=Math.min(1472/capture.width,(available-24)/capture.height),w=capture.width*scale,h=capture.height*scale;
   ctx.drawImage(capture.img,48+(1504-w)/2,top+(available-h)/2,w,h);
   ctx.fillStyle=muted;ctx.font='19px Arial,sans-serif';notes.forEach((line,i)=>ctx.fillText(line,48,noteTop+19+i*24));
   ctx.font='18px Arial,sans-serif';sources.forEach((line,i)=>ctx.fillText(line,48,sourceTop+18+i*23));
-  ctx.fillStyle=brand;ctx.fillRect(0,footerTop,1600,86);ctx.fillStyle='#fff';ctx.font='bold 29px Arial,sans-serif';ctx.fillText('X '+this.social.x,48,966);
-  ctx.font='26px Arial,sans-serif';const linkedin=this.social.linkedin;ctx.fillText(linkedin,1552-ctx.measureText(linkedin).width,966);
-  this.lastLayout={plot:{x:48,y:top,width:1504,height:available},capture:{x:48+(1504-w)/2,y:top+(available-h)/2,width:w,height:h},noteTop,sourceTop,footerTop};
+  ctx.fillStyle=brand;ctx.fillRect(0,footerTop,1600,86);ctx.fillStyle='#fff';ctx.font='bold 29px Arial,sans-serif';ctx.fillText('X '+this.social.x,48,canvas.height-34);
+  ctx.font='26px Arial,sans-serif';const linkedin=this.social.linkedin;ctx.fillText(linkedin,1552-ctx.measureText(linkedin).width,canvas.height-34);
+  this.lastLayout={canvas:{width:canvas.width,height:canvas.height},plot:{x:48,y:top,width:1504,height:available},capture:{x:48+(1504-w)/2,y:top+(available-h)/2,width:w,height:h},noteTop,sourceTop,footerTop};
   return canvas;
  },
  async png(canvas){

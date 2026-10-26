@@ -46,7 +46,7 @@ def image(page, key, name):
     path = OUT / name
     event.value.save_as(path)
     with Image.open(path) as picture:
-        assert picture.size == (1600, 1000)
+        assert (picture.width == 1600 and 800 <= picture.height <= 2000)
         assert picture.convert("RGB").getextrema() != ((255, 255),) * 3
     return event.value.suggested_filename
 

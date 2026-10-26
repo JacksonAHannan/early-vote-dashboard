@@ -109,7 +109,7 @@ def inspect_png(path):
     from PIL import Image
 
     with Image.open(path) as image:
-        assert image.format == "PNG" and image.size == (1600, 1000)
+        assert image.format == "PNG" and (image.width == 1600 and 800 <= image.height <= 2000)
         assert image.convert("RGBA").getpixel((0, 0))[3] == 255
         colors = Counter(image.convert("RGB").get_flattened_data())
         assert sum(n for color, n in colors.items() if max(color) - min(color) > 35) > 100
@@ -390,7 +390,7 @@ def browser_audit(reference):
             "six demographic choices including total non-white",
             "date-specific cumulative cohort count and future 2026 gaps",
             "72 exported CSV rows match rendered engine values",
-            "ten PNG downloads have 1600 by 1000 opaque colored data",
+            "ten PNG downloads have 1600px width, adaptive height and opaque colored data",
             "keyboard collapse state survives workspace navigation",
             "1512, 768 and 390 pixel layouts do not overflow",
         ],

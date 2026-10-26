@@ -50,7 +50,7 @@ def run():
    page.locator('#tracking-measure').select_option('cumulative');assert page.evaluate('animationRecords.some(r=>r.target==="daily-charts"&&r.duration>0&&r.frames[0].opacity!==r.frames.at(-1).opacity)')
    with page.expect_download(timeout=60000) as dl:page.locator('[data-image="daily-0"]').click()
    dl.value.save_as(str(OUT/'timeline.png'));assert page.evaluate('Motion.effects.size')==0
-   with Image.open(OUT/'timeline.png') as im:assert im.size==(1600,1000)
+   with Image.open(OUT/'timeline.png') as im:assert (im.width == 1600 and 800 <= im.height <= 2000)
    page.locator('#precinct-explore-tab').click();settle();page.locator('#map-county').select_option('tarrant');page.wait_for_function('Atlas.county==="tarrant"&&document.getElementById("map-loading").hidden',timeout=120000)
    with page.expect_download(timeout=60000) as dl:page.locator('[data-image="map"]').click()
    dl.value.save_as(str(OUT/'map.png'));assert page.evaluate('Motion.flights.size')==0

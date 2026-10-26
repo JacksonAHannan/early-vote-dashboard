@@ -2,6 +2,8 @@
 
 Checked 26 October 2026. Scope: organic X and LinkedIn posts containing exported turnout graphics. First-party guidance below establishes upload and accessibility constraints; the proposed composition is a design recommendation, not evidence of an engagement increase.
 
+Implementation update: the user subsequently requested framing that follows each chart. Exports now retain 1600px width and use 800–2000px height (2:1 through 4:5), fitting the common organic-image limits below. Narrow charts use taller cards; complete chart proportions and metadata remain intact. The initial 1600×1000 default recommendation remains part of this dated research.
+
 ## Platform constraints
 
 | Destination | First-party guidance | Consequence for this dashboard |

@@ -264,7 +264,7 @@ def png_check(page):
         page.locator('[data-image="county-summary"]').click()
     target=OUT/f'visual-{TAG}-combined.png';event.value.save_as(target)
     with Image.open(target) as image:
-        assert image.size==(1600,1000)
+        assert (image.width == 1600 and 800 <= image.height <= 2000)
     text=' '.join(page.evaluate('window.__stressText'))
     assert 'Mail + in person' in text
     passed('Actual combined-turnout PNG exports with explicit method', file=target.name, canvas_text=page.evaluate('window.__stressText'))

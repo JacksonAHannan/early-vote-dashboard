@@ -122,7 +122,7 @@ def main():
             passed('Unchanged publication status checks preserve the accepted derived caches',requests=counts)
             with page.expect_download(timeout=60000) as event:page.locator('[data-image="regression"]').click()
             png=OUT/f'visual-{TAG}-revision.png';event.value.save_as(png)
-            with Image.open(png) as image:assert image.size==(1600,1000)
+            with Image.open(png) as image:assert (image.width == 1600 and 800 <= image.height <= 2000)
             assert not REPORT['javascript_errors'] and not REPORT['backend_api_requests'],REPORT
             passed('Updated regression exports a real PNG with zero JavaScript errors or backend API requests',file=png.name)
             REPORT['passed']=True

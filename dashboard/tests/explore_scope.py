@@ -124,7 +124,7 @@ def browser_checks():
    with page.expect_download(timeout=60000) as download:page.locator('[data-image="regression"]').click()
    download.value.save_as(str(OUT/'place-regression.png'))
    for file in ['texas-overview.png','place-regression.png']:
-    with Image.open(OUT/file) as im:check(im.size==(1600,1000),'social PNG size')
+    with Image.open(OUT/file) as im:check((im.width == 1600 and 800 <= im.height <= 2000),'social PNG size')
    check(not REPORT['javascript_errors'],REPORT['javascript_errors']);REPORT['checks'].append('Statewide/counties/points share map and regression scope; clear/back behavior; explicit measures; categorical maps and numeric regression/filter/CSV; county place views; responsive layout and real PNGs')
   except BaseException:page.screenshot(path=str(OUT/'failure.png'),full_page=True);raise
   finally:browser.close()

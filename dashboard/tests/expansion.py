@@ -438,7 +438,7 @@ def audit_browser(snapshot, census):
                 destination = OUT / "tarrant-map.png"
                 downloaded.value.save_as(str(destination))
                 with Image.open(destination) as image:
-                    assert image.format == "PNG" and image.size == (1600, 1000)
+                    assert image.format == "PNG" and (image.width == 1600 and 800 <= image.height <= 2000)
                     assert image.convert("RGBA").getpixel((0, 0))[3] == 255
                     colors = Counter(image.convert("RGB").get_flattened_data())
                     assert sum(count for color, count in colors.items() if max(color) - min(color) > 35) > 1000

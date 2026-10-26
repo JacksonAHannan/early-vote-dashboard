@@ -96,7 +96,7 @@ def png_download(page, selector, name, winner, count, fit, state=False):
     event.value.save_as(path)
     assert winner in event.value.suggested_filename, event.value.suggested_filename
     with Image.open(path) as image:
-        assert image.size == (1600, 1000)
+        assert (image.width == 1600 and 800 <= image.height <= 2000)
         assert len(image.convert("RGB").getcolors(1600001)) > 30
     texts = page.evaluate("window.__canvasText")
     captured = page.evaluate("window.__captureDescs")
@@ -107,7 +107,7 @@ def png_download(page, selector, name, winner, count, fit, state=False):
     if fit and fit["r_squared"] is not None:
         assert f'R² = {fit["r_squared"]:.3f}' in contents, contents
     assert "Official" in contents and ("Census" in contents or state), contents
-    REPORT["images"].append({"file": path.name, "filename": event.value.suggested_filename, "size": [1600, 1000], "texts": texts, "capture": captured})
+    REPORT["images"].append({"file": path.name, "filename": event.value.suggested_filename, "size": list(image.size), "texts": texts, "capture": captured})
     return path
 
 

@@ -166,7 +166,7 @@ def browser_acceptance():
    focus=page.locator('#matrix tbody td').nth(2);focus.focus();expect(focus).to_be_focused();expect(focus).to_have_attribute('aria-label',focus.get_attribute('title'))
    with page.expect_download(timeout=60000) as download:page.locator('[data-image="matrix"]').click()
    image=OUT/'matrix-export.png';download.value.save_as(str(image))
-   with Image.open(image) as img:check(img.size==(1600,1000) and img.format=='PNG','real PNG')
+   with Image.open(image) as img:check((img.width == 1600 and 800 <= img.height <= 2000) and img.format=='PNG','real PNG')
    captured=page.evaluate('async()=>{const desc=Visuals.descriptor("matrix"),c=await Visuals.capture(desc);return {title:desc.title,classification:desc.classification,source:desc.source,xml:decodeURIComponent(c.img.src.split(",").slice(1).join(","))};}')
    check('Hispanic' in captured['classification'] and 'Census' in captured['source'] and all(label in captured['xml'] for label in LABELS),'complete and correctly labeled capture')
    page.locator('[data-matrix-layout="counties"]').click();expect(page.locator('#matrix th.matrix-total')).to_have_text('All Counties');expect(page.locator('#matrix-county-controls')).to_be_visible()

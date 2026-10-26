@@ -1,5 +1,7 @@
 # Image export audit
 
+Current update: the shared compositor now sizes frame height from the complete capture, at 1600px wide and 800–2000px high. Fixed 1600×1000 dimensions below describe the audited baseline; capture completeness, dates, methods, source notes and race safeguards still apply. See `dashboard/tests/export_framing.py` for the whitespace regression check.
+
 Read-only architecture review, 2026-10-26. No turnout arithmetic or source handling changes are proposed here.
 
 ## Rendering owners and shared seam

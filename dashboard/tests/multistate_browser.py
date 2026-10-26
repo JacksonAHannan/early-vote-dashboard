@@ -77,22 +77,28 @@ def png_file(page, key, name):
     path = OUT / ("export-" + name + ".png")
     event.value.save_as(path)
     with Image.open(path) as img:
-        assert img.size == (1600, 1000), (key, img.size)
+        assert (img.width == 1600 and 800 <= img.height <= 2000), (key, img.size)
         rgb = img.convert("RGB")
         assert len(rgb.getcolors(1600001)) > 30, (key, "blank image")
         if "A" in img.getbands():
             assert img.getchannel("A").getextrema() == (255, 255)
         if key in ("table", "precincts"):
-            # A browser scrollbar creates a long dark neutral run; table
-            # rules are pale and text cannot form a 200-pixel solid bar.
+            # A scrollbar is a thick neutral rectangle. A scaled one-pixel
+            # table rule/header edge can also be gray, so require thickness.
+            # Scan the complete capture, including adaptive portrait cards.
+            capture = page.evaluate("Visuals.lastLayout.capture")
             pixels = rgb.load()
-            for y in range(210, 900):
-                run = 0
+            thick_rows = 0
+            for y in range(max(0, int(capture["y"])),
+                           min(img.height, int(capture["y"] + capture["height"]) + 1)):
+                run = longest = 0
                 for x in range(48, 1552):
                     r, g, b = pixels[x, y]
                     run = run + 1 if 70 <= r <= 180 and abs(r - g) < 3 and abs(g - b) < 3 else 0
-                    assert run <= 200, (key, "scrollbar clipped exported table", x, y)
-    REPORT["images"].append({"key": key, "file": path.name, "size": [1600, 1000], "filename": event.value.suggested_filename})
+                    longest = max(longest, run)
+                thick_rows = thick_rows + 1 if longest > 200 else 0
+                assert thick_rows < 3, (key, "scrollbar clipped exported table", y)
+    REPORT["images"].append({"key": key, "file": path.name, "size": list(img.size), "filename": event.value.suggested_filename})
     return path
 
 

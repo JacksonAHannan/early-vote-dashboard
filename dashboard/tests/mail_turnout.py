@@ -394,7 +394,8 @@ def browser_audit():
                 page.evaluate('window.__mailText=[]')
                 path = download(page, '[data-image="county-daily"]', f'texas-{classification}-{method}.png')
                 with Image.open(path) as image:
-                    eq(image.size, (1600, 1000), path.name + '/dimensions')
+                    eq(image.width, 1600, path.name + '/width')
+                    assert 800 <= image.height <= 2000, (path.name, image.size)
                     eq(image.format, 'PNG', path.name + '/format')
                 text = page.evaluate('window.__mailText')
                 assert any(label in line for line in text), (path.name, text)
@@ -466,7 +467,8 @@ def browser_audit():
                 page.evaluate('window.__mailText=[]')
                 path = download(page, '[data-state-image="turnout"]', f'{state}-combined-turnout.png')
                 with Image.open(path) as image:
-                    eq(image.size, (1600, 1000), path.name + '/dimensions')
+                    eq(image.width, 1600, path.name + '/width')
+                    assert 800 <= image.height <= 2000, (path.name, image.size)
                 texts = page.evaluate('window.__mailText')
                 assert any('Mail + in person' in line for line in texts), (path.name, texts)
                 REPORT['images'].append(str(path.relative_to(ROOT)))

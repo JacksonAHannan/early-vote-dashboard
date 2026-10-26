@@ -91,7 +91,7 @@ def main():
    page.locator('#matrix-search').fill('Harris')
    with page.expect_download(timeout=60000) as download:page.locator('[data-image="matrix"]').click()
    path=OUT/'matrix-export.png';download.value.save_as(str(path))
-   with Image.open(path) as image:assert image.size==(1600,1000) and image.format=='PNG'
+   with Image.open(path) as image:assert (image.width == 1600 and 800 <= image.height <= 2000) and image.format=='PNG'
    xml=page.evaluate('async()=>{const c=await Visuals.capture(Visuals.descriptor("matrix"));return decodeURIComponent(c.img.src.split(",").slice(1).join(","));}')
    assert 'All Counties' in xml and 'Harris' in xml
    assert 'position: sticky' not in xml

@@ -28,11 +28,11 @@ INSTRUMENT = r"""(() => {
  const text=CanvasRenderingContext2D.prototype.fillText;
  window.__brandText=[];
  CanvasRenderingContext2D.prototype.fillText=function(value,x,y,...rest){
-  if(this.canvas.width===1600&&this.canvas.height===1000){
+  if(this.canvas.width===1600&&this.canvas.height>=800&&this.canvas.height<=2000){
    const m=this.measureText(String(value)),t=this.getTransform();
    window.__brandText.push({text:String(value),left:x-m.actualBoundingBoxLeft,
     right:x+m.actualBoundingBoxRight,top:y-m.actualBoundingBoxAscent,
-    bottom:y+m.actualBoundingBoxDescent,identity:t.a===1&&t.b===0&&t.c===0&&t.d===1});
+    bottom:y+m.actualBoundingBoxDescent,canvasHeight:this.canvas.height,identity:t.a===1&&t.b===0&&t.c===0&&t.d===1});
   }
   return text.call(this,value,x,y,...rest);
  };
@@ -51,17 +51,17 @@ def compact(value):
 def inspect_png(path, text_calls):
     assert path.stat().st_size < 5_000_000, (path, 'over platform organic image limit')
     with Image.open(path) as image:
-        assert image.format == 'PNG' and image.size == (1600, 1000)
+        assert image.format == 'PNG' and (image.width == 1600 and 800 <= image.height <= 2000)
         assert image.convert('RGBA').getchannel('A').getextrema() == (255, 255)
         assert len(image.convert('RGB').getcolors(1_600_001)) > 30, 'blank image'
-        image.resize((390, 244)).save(path.with_name(path.stem + '-feed.png'))
+        image.resize((390, round(390 * image.height / image.width))).save(path.with_name(path.stem + '-feed.png'))
     ocr = subprocess.run(['tesseract', str(path), 'stdout'], capture_output=True,
                          text=True, check=True).stdout
     # Dense tables can confuse whole-page layout detection. Read the permanent
     # footer separately while retaining exact identity strings and pixel proof.
     with Image.open(path) as image:
         footer_path = path.with_name(path.stem + '-footer.png')
-        image.crop((0, 914, 1600, 1000)).save(footer_path)
+        image.crop((0, image.height - 86, image.width, image.height)).save(footer_path)
     footer = subprocess.run(['tesseract', str(footer_path), 'stdout', '--psm', '6'],
                             capture_output=True, text=True, check=True).stdout
     assert compact(X) in compact(footer), ('X attribution missing from pixels', footer)
@@ -71,7 +71,7 @@ def inspect_png(path, text_calls):
     for row in text_calls:
         if row['identity']:
             assert row['left'] >= -1 and row['right'] <= 1601, ('horizontal text clipping', row)
-            assert row['top'] >= -1 and row['bottom'] <= 1001, ('vertical text clipping', row)
+            assert row['top'] >= -1 and row['bottom'] <= row['canvasHeight'] + 1, ('vertical text clipping', row)
     return ocr
 
 
