@@ -852,6 +852,24 @@ async fn main() -> Result<()> {
             }),
         )
         .route(
+            "/brand.css",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/css")],
+                    include_str!("../static/brand.css"),
+                )
+            }),
+        )
+        .route(
+            "/brand-portrait.jpg",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "image/jpeg")],
+                    include_bytes!("../static/brand-portrait.jpg").as_slice(),
+                )
+            }),
+        )
+        .route(
             "/style.css",
             get(|| async {
                 (

@@ -1,3 +1,31 @@
+# Early vote — Jackson Hannan identity
+
+Reference: [Alabama legislative model](https://jacksonahannan.github.io/alabama-state-house-and-state-senate-model/index.html?model=headline&chamber=house&mode=probability&view=map), measured October 26, 2026. This is the current presentation direction; the earlier VoteHub notes below remain historical analytical guidance.
+
+![Reference identity and analytical layout](../sources/brand-refresh/reference-desktop.png)
+
+Evidence and exact measurements: [brand reference](../sources/brand-refresh/reference.md). Social requirements and design evidence: [organic social exports](../sources/social-export/findings.md). Rendering contracts: [export audit](../sources/brand-refresh/export-audit.md).
+
+## Current design plan
+
+- **Palette:** paper `#dbeaf2`, white `#ffffff`, panel `#eef5f8`, ink `#211b1b`, muted `#586772`, burgundy `#743b42`; blue-grey rules `#9db4c1`. These are measured reference tokens. Burgundy identifies the author and controls; existing partisan, turnout, missing-data and Census colors retain their analytical meaning.
+- **Type:** Arial/Helvetica UI and bold compact headlines; Georgia only for longer source/method reading. System fonts reproduce the reference without downloads. Tabular numerals remain essential. No extra uppercase kickers or repeated subtitles.
+- **Layout:** an author masthead with the existing square avatar and genuine social links, then a strong Early vote title and compact state/date/update controls. Center the analytical canvas at a recommended 1320px maximum (slightly wider than the reference's1224px to accommodate linked maps and county matrices). Keep county/precinct workspaces, shared scope and collapse behavior unchanged. Use square white chart panels, contiguous rectangular controls and restrained burgundy section rules.
+- **Social images:** preserve1600×1000 PNG, which is within both platforms' organic guidance. One shared compositor frames every Texas and other-state visual with the same identity, a compact descriptive headline and dates/method, white chart surface, essential coverage/source notes and permanent **X @electionsjack / linkedin.com/in/jackson-hannan** attribution. Do not crop, distort or invent an engagement headline. Retain the full matrix and current view; individual panels remain the most readable choice for dense comparisons. Offer copyable neutral post captions and objective ALT text from the frozen export context.
+- **Interaction:** retain existing action-driven map flights and reduced-motion behavior. Exports settle animations, wait for fonts/avatar and keep selection-race safeguards. Do not introduce decorative ambient animation or a blocking export wizard.
+
+```text
+Burgundy: avatar + Jackson Hannan       Early vote / Alabama forecast / X / LinkedIn
+Pale blue: Early vote                   State / dates / update / coffee
+           Counties | Precincts         existing analytical controls
+           White charts / maps / tables, grouped by the existing comparison task
+Export:    Author stripe → concise title/context → complete visual → sources + social signature
+```
+
+Review against the brief: a generic hero, decorative gradient, new font stack and rounded-card kit would obscure the provided identity and waste analytical space. The measured paper/burgundy identity and squared panels supply the visual change. Keep UI copy minimal. Engagement recommendations here concern clarity, recognizability and platform compatibility; no uplift in impressions or likes is asserted. The avatar is reused unchanged from the supplied user-site reference, with provenance in the reference note; no unrelated third-party assets are introduced.
+
+---
+
 # Texas early vote dashboard — VoteHub reference
 
 Capture date: 2026-10-23. Target: existing Rust dashboard and linked map/scatter workspace.

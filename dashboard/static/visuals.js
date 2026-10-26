@@ -1,6 +1,7 @@
 'use strict';
 // Panel state and client-side share cards. No source requests or external assets.
 const Visuals=window.Visuals={
+ social:{name:'Jackson Hannan',x:'@electionsjack',xUrl:'https://x.com/electionsjack',linkedin:'linkedin.com/in/jackson-hannan',linkedinUrl:'https://www.linkedin.com/in/jackson-hannan',dashboard:'https://jacksonahannan.github.io/early-vote-dashboard/'},
  storageKey:'texas-turnout:collapsed:v1',collapsed:new Set(),busy:false,queued:false,
  panels:[
   ['county-daily-section','.section-heading','County bucket timelines','county-daily'],
@@ -175,23 +176,92 @@ const Visuals=window.Visuals={
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><foreignObject width="100%" height="100%">${new XMLSerializer().serializeToString(wrapper)}</foreignObject></svg>`;
   const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();return {img,width,height};
  },
- wrapText(ctx,text,maxWidth){const lines=[];let current='';for(const word of text.split(/\s+/)){if(current&&ctx.measureText(current+' '+word).width>maxWidth){lines.push(current);current=word;}else current+=(current?' ':'')+word;}if(current)lines.push(current);return lines;},
+ // Wrap all metadata, including a long URL or county name, without clipping.
+ wrapText(ctx,text,maxWidth){
+  const lines=[];
+  for(const paragraph of String(text||'').split('\n')){
+   let current='';
+   for(const word of paragraph.split(/\s+/).filter(Boolean)){
+    if(current&&ctx.measureText(current+' '+word).width>maxWidth){lines.push(current);current='';}
+    let part='';
+    for(const character of word){if(part&&ctx.measureText(part+character).width>maxWidth){if(current){lines.push(current);current='';}lines.push(part);part='';}part+=character;}
+    current+=(current?' ':'')+part;
+   }
+   if(current)lines.push(current);
+  }
+  return lines;
+ },
+ shareText(desc){
+  const context=[desc.scope,desc.classification,desc.cohortLabel,desc.static||desc.day==null?'':`Day ${desc.day}`,desc.static?'':desc.period].filter(Boolean).join(' · ');
+  const detail=[desc.title,context,desc.footer,desc.note,desc.source].filter(Boolean).join('. ');
+  const links=`${this.social.dashboard}\n${this.social.x} · ${this.social.linkedinUrl}`;
+  const period=[desc.static||desc.day==null?'':`Day ${desc.day}`,desc.static?'':desc.period].filter(Boolean).join(' · ');
+  // A concise caption works for standard X posts as well as LinkedIn. Full
+  // coverage/method notes remain in the graphic and separate image description.
+  const candidates=[
+   [desc.title,context,links].filter(Boolean).join('\n\n'),
+   [desc.title,period,links].filter(Boolean).join('\n\n'),
+   [`Early vote analysis${desc.static||desc.day==null?'':` · Day ${desc.day}`}`,'Comparison dates, scope and coverage are shown in the graphic.',links].join('\n\n')
+  ];
+  const caption=candidates.find(value=>Array.from(value).length<=280);
+  const alt=detail.length<=1000?detail:detail.slice(0,996)+'…';
+  return {caption,alt,title:desc.title,context};
+ },
+ offerShare(desc){
+  this.lastShare=this.shareText(desc);this.status('PNG downloaded');clearTimeout(this.statusTimer);
+  const node=$('image-status'),actions=document.createElement('div');actions.className='image-share-actions';
+  for(const [field,label]of [['caption','Copy caption'],['alt','Copy ALT text']]){
+   const button=document.createElement('button');button.type='button';button.id='copy-image-'+field;button.textContent=label;
+   const frozen=this.lastShare[field];button.addEventListener('click',async()=>{
+    try{await navigator.clipboard.writeText(frozen);button.textContent='Copied';setTimeout(()=>button.textContent=label,1800);}
+    catch(_){let area=node.querySelector('textarea');if(!area){area=document.createElement('textarea');area.readOnly=true;node.append(area);}area.setAttribute('aria-label',label.replace('Copy ','')+' — select and copy');area.value=frozen;area.focus();area.select();}
+   });actions.append(button);
+  }
+  const close=document.createElement('button');close.type='button';close.textContent='Close';close.setAttribute('aria-label','Dismiss image sharing options');close.addEventListener('click',()=>node.replaceChildren());actions.append(close);node.append(actions);
+ },
+ async compose(capture,desc){
+  await document.fonts.ready;
+  if(!(capture.width>0&&capture.height>0))throw Error('The visual has no drawable area');
+  const canvas=document.createElement('canvas');canvas.width=1600;canvas.height=1000;
+  const ctx=canvas.getContext('2d'),style=getComputedStyle(document.body),token=(name,fallback)=>style.getPropertyValue(name).trim()||fallback;
+  const paper=token('--brand-paper','#dbeaf2'),ink=token('--ink','#211b1b'),muted=token('--muted','#586772'),brand=token('--brand-accent','#743b42'),rule=token('--rule','#9db4c1');
+  ctx.fillStyle=paper;ctx.fillRect(0,0,1600,1000);ctx.fillStyle=brand;ctx.fillRect(0,0,1600,76);
+  let authorX=48;const portrait=$('brand-portrait');
+  if(portrait){try{await portrait.decode();ctx.drawImage(portrait,48,14,48,48);authorX=112;}catch(_){/* Plain-text identity remains complete if the portrait fails. */}}
+  ctx.fillStyle='#fff';ctx.font='bold 27px Arial,sans-serif';ctx.fillText(this.social.name,authorX,49);
+  ctx.font='22px Arial,sans-serif';const masthead='EARLY VOTE · 2026';ctx.fillText(masthead,1552-ctx.measureText(masthead).width,48);
+  ctx.fillStyle=ink;ctx.font='bold 40px Arial,sans-serif';let top=128;
+  for(const line of this.wrapText(ctx,desc.title,1504)){ctx.fillText(line,48,top);top+=47;}
+  ctx.fillStyle=muted;ctx.font='22px Arial,sans-serif';
+  const context=[desc.scope,desc.classification,desc.cohortLabel,desc.static||desc.day==null?'':`Day ${desc.day}`].filter(Boolean).join(' · ');
+  for(const line of this.wrapText(ctx,context,1504)){ctx.fillText(line,48,top-9);top+=28;}
+  if(!desc.static&&desc.period){for(const line of this.wrapText(ctx,desc.period,1504)){ctx.fillText(line,48,top-9);top+=28;}}
+  if(desc.legend){const y=top-5;for(const [i,year,color]of [[0,2024,'#8d9aab'],[1,2026,desc.legendColor||ink]]){const x=48+i*145;ctx.strokeStyle=color;ctx.lineWidth=3;ctx.setLineDash(i?[]:[7,5]);ctx.beginPath();ctx.moveTo(x,y-6);ctx.lineTo(x+30,y-6);ctx.stroke();ctx.setLineDash([]);ctx.fillText(String(year),x+40,y);}top+=29;}
+  top+=7;
+  ctx.font='19px Arial,sans-serif';const notes=this.wrapText(ctx,[desc.note,desc.footer].filter(Boolean).join(' · '),1504);
+  ctx.font='18px Arial,sans-serif';const sources=this.wrapText(ctx,'Source: '+desc.source,1504);
+  const footerTop=914,sourceTop=footerTop-17-sources.length*23,noteTop=sourceTop-13-notes.length*24,plotBottom=noteTop-20,available=plotBottom-top;
+  if(available<170)throw Error('This visual has too much context for a share image. Export a focused panel.');
+  ctx.fillStyle='#fff';ctx.fillRect(48,top,1504,available);ctx.strokeStyle=rule;ctx.lineWidth=1;ctx.strokeRect(48.5,top+.5,1503,available-1);
+  const scale=Math.min(1472/capture.width,(available-24)/capture.height),w=capture.width*scale,h=capture.height*scale;
+  ctx.drawImage(capture.img,48+(1504-w)/2,top+(available-h)/2,w,h);
+  ctx.fillStyle=muted;ctx.font='19px Arial,sans-serif';notes.forEach((line,i)=>ctx.fillText(line,48,noteTop+19+i*24));
+  ctx.font='18px Arial,sans-serif';sources.forEach((line,i)=>ctx.fillText(line,48,sourceTop+18+i*23));
+  ctx.fillStyle=brand;ctx.fillRect(0,footerTop,1600,86);ctx.fillStyle='#fff';ctx.font='bold 29px Arial,sans-serif';ctx.fillText('X '+this.social.x,48,966);
+  ctx.font='26px Arial,sans-serif';const linkedin=this.social.linkedin;ctx.fillText(linkedin,1552-ctx.measureText(linkedin).width,966);
+  this.lastLayout={plot:{x:48,y:top,width:1504,height:available},capture:{x:48+(1504-w)/2,y:top+(available-h)/2,width:w,height:h},noteTop,sourceTop,footerTop};
+  return canvas;
+ },
+ async png(canvas){
+  const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(Error('PNG encoding failed')),'image/png'));
+  if(blob.size>5000000)throw Error('PNG exceeds the 5 MB sharing limit. Export a focused panel.');return blob;
+ },
  async download(key,button){
   if(this.busy)return;this.busy=true;button.disabled=true;this.status('Preparing PNG…');
   try{
    if(!data)throw Error('Wait for the dashboard to load');
-   await document.fonts.ready;Motion.finish();const desc=this.descriptor(key),capture=await this.capture(desc),canvas=document.createElement('canvas');canvas.width=1600;canvas.height=1000;
-   const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,1600,1000);ctx.fillStyle='#66758a';ctx.font='22px Arial,sans-serif';ctx.fillText('Texas early vote',48,43);
-   ctx.font='bold 36px Arial,sans-serif';ctx.fillStyle='#1d2633';const titles=this.wrapText(ctx,desc.title,1504);titles.forEach((line,i)=>ctx.fillText(line,48,98+i*43));
-   let top=98+(titles.length-1)*43;ctx.fillStyle='#66758a';ctx.font='21px Arial,sans-serif';const context=[desc.scope,desc.classification,desc.cohortLabel,desc.static?'':`Day ${desc.day}`].filter(Boolean).join(' · ');for(const line of this.wrapText(ctx,context,1504)){top+=29;ctx.fillText(line,48,top);}
-   if(!desc.static){top+=30;ctx.fillText(desc.period,48,top);}
-   if(desc.legend){const y=top+28;for(const [i,year,color]of [[0,2024,'#8d9aab'],[1,2026,desc.legendColor]]){const x=48+i*120;ctx.strokeStyle=color;ctx.lineWidth=3;ctx.setLineDash(i?[]:[7,5]);ctx.beginPath();ctx.moveTo(x,y-6);ctx.lineTo(x+30,y-6);ctx.stroke();ctx.setLineDash([]);ctx.fillText(String(year),x+40,y);}top+=35;}
-   top+=20;ctx.strokeStyle='#e3e7ed';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(48,top);ctx.lineTo(1552,top);ctx.stroke();top+=18;
-   ctx.font='19px Arial,sans-serif';const notes=this.wrapText(ctx,[desc.note,desc.footer].filter(Boolean).join(' · '),1504),bottom=934-notes.length*24,available=Math.max(220,bottom-top-20),scale=Math.min(1504/capture.width,available/capture.height),w=capture.width*scale,h=capture.height*scale;
-   ctx.drawImage(capture.img,48+(1504-w)/2,top+(available-h)/2,w,h);
-   ctx.fillStyle='#66758a';notes.forEach((line,i)=>ctx.fillText(line,48,bottom+24+i*24));ctx.fillStyle='#7b8796';ctx.font='18px Arial,sans-serif';ctx.fillText(desc.source,48,978);
-   const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(Error('PNG encoding failed')),'image/png'));
-   const url=URL.createObjectURL(blob),link=document.createElement('a'),slug=desc.title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');link.href=url;link.download=`texas-${desc.key}-${slug}-${desc.mode}-day-${desc.day}-${desc.through}.png`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);this.status('PNG downloaded');
+   await document.fonts.ready;Motion.finish();const desc=this.descriptor(key),capture=await this.capture(desc),canvas=await this.compose(capture,desc),blob=await this.png(canvas);
+   const url=URL.createObjectURL(blob),link=document.createElement('a'),slug=desc.title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');link.href=url;link.download=`texas-${desc.key}-${slug}-${desc.mode}-day-${desc.day}-${desc.through}.png`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);this.offerShare(desc);
   }catch(error){this.status(`Image export failed: ${error.message}`,true);}
   finally{this.busy=false;this.sync();}
  }

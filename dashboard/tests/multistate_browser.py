@@ -154,7 +154,7 @@ def run():
                     else:
                         assert page.locator("#state-panel-regression").is_hidden()
                     if page.locator("#state-buckets .state-bucket").count() == 0:
-                        expect(page.locator("#state-buckets .state-empty")).to_contain_text("not published")
+                        expect(page.locator("#state-buckets .state-empty")).to_have_text("No same-date comparison published for this breakdown")
                         expect(page.locator('[data-state-image="buckets"]')).to_be_disabled()
                 classification(page, "partisan")
                 methods = page.evaluate("States.view.methods")
@@ -434,7 +434,7 @@ def run_precincts():
             choose_state(page, "va")
             page.wait_for_function("States.precinctView&&!States.precinctPending", timeout=120000)
             assert page.evaluate("States.precinctView.rows.length") == 0
-            expect(page.locator("#state-precinct-table")).to_contain_text("No reported precinct observations")
+            expect(page.locator("#state-precinct-table tbody")).to_have_text("No reported mail + in person precinct observations")
             expect(page.locator('[data-state-image="precincts"]')).to_be_disabled()
             classification(page, "demographic")
             page.wait_for_function("States.precinctView&&!States.precinctPending", timeout=120000)

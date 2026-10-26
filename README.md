@@ -15,6 +15,8 @@ Georgia covers all 159 counties; North Carolina all 100; Virginia all 133 locali
 
 ## Updates and hosting
 
+The presentation matches [Jackson Hannan’s Alabama forecast](https://jacksonahannan.github.io/alabama-state-house-and-state-senate-model/). PNG exports carry X **@electionsjack** and **linkedin.com/in/jackson-hannan**, with copyable captions and ALT text. [Export specifications and research](sources/social-export/findings.md).
+
 GitHub Pages hosts the website. GitHub Actions runs the Rust collectors and analysis once an hour, at minute 17 UTC, then publishes a validated static build. Scheduled runs can be delayed by GitHub; timestamps in the dashboard identify the actual data generation. The browser checks the current publication once per hour. **Check updates** checks the latest publication rather than initiating a new source scrape.
 
 Source failures retain successful observations. Each observed comparison pairs precisely the supported geography and date in both years. Publication never infers missing votes or allocates county totals to precincts. A failed build leaves the prior website in place.

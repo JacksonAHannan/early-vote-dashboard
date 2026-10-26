@@ -75,3 +75,6 @@ a.download[aria-disabled="true"]{opacity:.45;pointer-events:none}
  .leaflet-interactive{transition:fill .2s,fill-opacity .18s,stroke .18s,stroke-width .18s}
 }
 @media(prefers-reduced-motion:reduce){*{animation:none!important}}
+
+/* Post-download sharing stays beside the analysis and never opens a posting flow. */
+.image-share-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.image-share-actions button{padding:7px 10px;border:1px solid #cddbe3;border-radius:0;background:#f8fbfc;color:#211b1b;font:600 12px Arial,sans-serif}.image-share-actions button:focus-visible{outline:2px solid #fff;outline-offset:2px}.image-status textarea{display:block;width:100%;min-height:120px;max-height:220px;margin-top:10px;padding:8px;border:1px solid #9db4c1;background:white;color:#211b1b;font:13px/1.5 Arial,sans-serif;resize:vertical}.brand-site .image-status{background:#743b42;border:1px solid #9db4c1;border-radius:0;box-shadow:none}
