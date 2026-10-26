@@ -78,6 +78,17 @@ def main():
                         inside:a.left>=0&&a.right<=innerWidth,
                         overlap:a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top};}""")
                     assert layout == {"overflow": False, "inside": True, "overlap": False}, (state, width, layout)
+                if width == 390:
+                    page.locator("#state-select").select_option("tx")
+                    expect(page.locator("#days")).to_be_visible()
+                    # Exercise the full twelve-day strip even with an older data fixture.
+                    strip = page.evaluate("""()=>{const d=document.querySelector('#days'),saved=[...d.children];
+                        try{d.replaceChildren(...Array.from({length:12},(_,i)=>{const b=document.createElement('button');b.textContent='Day '+(i+1);return b;}));
+                        const overflow=document.documentElement.scrollWidth>innerWidth,scroll=d.scrollWidth>d.clientWidth;
+                        d.scrollLeft=d.scrollWidth;const last=d.lastElementChild.getBoundingClientRect();
+                        return {overflow,scroll,lastVisible:last.right<=innerWidth};}
+                        finally{d.replaceChildren(...saved);d.scrollLeft=0;}}""")
+                    assert strip == {"overflow": False, "scroll": True, "lastVisible": True}, strip
                 page.locator("#support-link").focus()
                 page.locator("header").screenshot(path=str(OUT / f"header-{width}.png"))
                 checkout(page, context, str(width), keyboard=width == 1512)
