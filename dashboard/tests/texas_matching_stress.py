@@ -71,7 +71,8 @@ def resolve(sources, year, ids):
                 total = dict(ev)
             elif cumulative[-1] is not None:
                 total = {p: ev[p] + cumulative[-1][p] for p in ev.keys() & cumulative[-1].keys()}
-        if ev is None and total is not None:
+        anchor = latest.get(((start(year) + timedelta(days=day)).isoformat(), True))
+        if ev is None and total is not None and (anchor is None or anchor.get('allow_daily_difference') is not False):
             prior = cumulative[-1] if day else dict.fromkeys(ids, 0)
             if prior is not None:
                 ev = {p: total[p] - prior[p] for p in total.keys() & prior.keys() if total[p] >= prior[p]}
@@ -96,7 +97,11 @@ def check_resolver_contract():
     assert daily[0] == cumulative[0] == {'2': 10}
     daily, cumulative = resolve([observation(1, {'1': 10, '99999': 0})], 2026, ids)
     assert daily[0] == cumulative[0] == {'1': 10, '2': 0}
-    return 5
+    anchor = observation(2, {'1': 20}, cumulative=True)
+    anchor['allow_daily_difference'] = False
+    daily, cumulative = resolve([observation(1, {'1': 5}), anchor], 2026, ids)
+    assert daily[1] is None and cumulative[1] == {'1': 20, '2': 0}
+    return 6
 
 
 def fit(points):

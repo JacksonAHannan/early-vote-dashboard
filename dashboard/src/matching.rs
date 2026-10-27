@@ -45,7 +45,9 @@ pub(crate) fn full_with_ids(
         exact(sources, year, day, false).is_some_and(|d| is_complete(d, universe))
             && (day == 1 || full_with_ids(sources, year, day - 1, true, universe))
     } else {
-        let Some(now) = exact(sources, year, day, true).filter(|d| is_complete(d, universe)) else {
+        let Some(now) = exact(sources, year, day, true)
+            .filter(|d| is_complete(d, universe) && d.allow_daily_difference != Some(false))
+        else {
             return false;
         };
         if day == 1 {
@@ -125,6 +127,9 @@ pub(crate) fn counts_with_ids(
         return Some(result);
     }
     let now = exact(sources, year, day, true)?;
+    if now.allow_daily_difference == Some(false) {
+        return None;
+    }
     let now_counts = counts_with_ids(sources, year, day, true, universe)?;
     if day == 1 {
         return Some(now_counts);
@@ -232,6 +237,8 @@ mod tests {
     use super::*;
     fn source(year: i32, day: u32, values: &[(&str, u64)], complete: bool) -> Daily {
         Daily {
+            allow_daily_difference: None,
+            zero_evidence: Vec::new(),
             unavailable_precincts: Vec::new(),
             complete,
             county: "x".into(),

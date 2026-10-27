@@ -1,0 +1,19 @@
+{
+  "county": "denton",
+  "election": "2024-11-05",
+  "source_api": "https://www.votedenton.gov/ce/mobile/seam/resource/rest/election/getElection?eid=140&lang=en&callback=soeElectionObj.processElection",
+  "source_api_sha256": "cbccacb7f10f8547aab3e522aaad068e2f7eed196423229df1baf3a3ebc8f689",
+  "reports_url": "https://assets01.aws.connect.clarityelections.com/Assets/Connect/RootPublish/denton-tx.connect.clarityelections.com/ElectionResults/2024/1124/2024_General_Election_Results_Reports.zip",
+  "reports_sha256": "696dda44fa4afabd7ac1c3f9d7b5bacaed70478321b1f6e95711985e14051c48",
+  "aggregate_members": [
+    {
+      "path": "sources/large-county-recovery/denton-2024-presidential-canvass.pdf",
+      "sha256": "eb531fbe7489d43c34222b612f05216dba62fbc7091cac273c848b61c57c5191"
+    },
+    {
+      "path": "sources/large-county-recovery/denton-2024-county-summary.pdf",
+      "sha256": "82647a8409d390e8d1348ace3b846034a3b6b6e818239fbdeeb67f88d7b6ded5"
+    }
+  ],
+  "privacy": "Only aggregate candidate/election results archived. No voter rosters or identities persisted."
+}

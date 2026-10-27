@@ -902,6 +902,8 @@ mod tests {
 
     fn daily(county: &str, year: i32, day: u32, counts: &[(&str, u64)], cumulative: bool) -> Daily {
         Daily {
+            allow_daily_difference: None,
+            zero_evidence: Vec::new(),
             unavailable_precincts: Vec::new(),
             county: county.into(),
             date: start(year) + chrono::Duration::days(i64::from(day - 1)),

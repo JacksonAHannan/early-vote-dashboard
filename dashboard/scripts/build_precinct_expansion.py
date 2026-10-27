@@ -199,7 +199,8 @@ def main():
     parser.add_argument("--merge-existing", action="store_true",
                         help="Replace only selected counties in the additive reference and audit")
     parser.add_argument("--native-returns-dir", type=Path,
-                        help="Optional per-county certified presidential-2024.csv and source.json")
+                        default=Path(__file__).resolve().parents[1] / "returns",
+                        help="Per-county certified presidential-2024.csv and source.json; defaults to reviewed versioned returns")
     args = parser.parse_args()
     if args.counties_file:
         assert not args.counties, "Choose --counties or --counties-file"

@@ -42,6 +42,26 @@ pub struct Recovery {
     pub schema_version: u32,
     pub method: String,
     pub observations: Vec<RecoveredObservation>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub zero_proofs: Vec<PrecinctZeroProof>,
+}
+/// Dated, explicit zero cells, kept separate from the original roster's hash.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ZeroEvidence {
+    pub through: NaiveDate,
+    pub precincts: Vec<String>,
+    pub scope: String,
+    pub source: String,
+    pub sha256: String,
+    pub retrieved_at: String,
+    pub note: String,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PrecinctZeroProof {
+    pub county: String,
+    pub year: i32,
+    #[serde(flatten)]
+    pub evidence: ZeroEvidence,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RecoveredObservation {
@@ -50,15 +70,27 @@ pub struct RecoveredObservation {
 }
 impl Recovery {
     fn load(root: &Path) -> Result<Option<Self>> {
-        let path = root.join("recovery/texas-20261025.json");
-        if !path.exists() {
-            return Ok(None);
+        let mut editions = Vec::new();
+        for file in ["texas-20261025.json", "texas-20261027.json"] {
+            let path = root.join("recovery").join(file);
+            if path.exists() {
+                let edition: Self = serde_json::from_slice(&std::fs::read(path)?)?;
+                ensure!(
+                    edition.schema_version == 1 && !edition.method.is_empty(),
+                    "Invalid source recovery edition"
+                );
+                editions.push(edition);
+            }
         }
-        let value: Self = serde_json::from_slice(&std::fs::read(path)?)?;
-        ensure!(
-            value.schema_version == 1 && !value.method.is_empty(),
-            "Invalid source recovery edition"
-        );
+        let Some(mut value) = editions.into_iter().reduce(|mut previous, next| {
+            previous.method.push_str("; ");
+            previous.method.push_str(&next.method);
+            previous.observations.extend(next.observations);
+            previous.zero_proofs.extend(next.zero_proofs);
+            previous
+        }) else {
+            return Ok(None);
+        };
         let mut keys = std::collections::BTreeSet::new();
         for item in &value.observations {
             let d = &item.source;
@@ -79,10 +111,64 @@ impl Recovery {
                 "Invalid superseded source hash"
             );
         }
+        if !value.zero_proofs.is_empty() {
+            let references: Vec<Reference> =
+                serde_json::from_slice(&std::fs::read(root.join("data/reference.json"))?)?;
+            for proof in &mut value.zero_proofs {
+                let evidence = &mut proof.evidence;
+                ensure!(
+                    matches!(proof.year, 2024 | 2026)
+                        && evidence.through.year() == proof.year
+                        && evidence.through >= crate::start(proof.year),
+                    "Invalid zero-evidence date window"
+                );
+                ensure!(
+                    match evidence.scope.as_str() {
+                        "all_methods_final_ballots_cast" =>
+                            proof.year == 2024
+                                && evidence.through == NaiveDate::from_ymd_opt(2024, 11, 5).unwrap(),
+                        "in_person_cumulative" =>
+                            proof.year == 2026
+                                && evidence.through
+                                    <= crate::start(2026) + chrono::Duration::days(11),
+                        _ => false,
+                    },
+                    "Unsupported zero-evidence scope or cutoff"
+                );
+                ensure!(
+                    evidence.source.starts_with("https://")
+                        && evidence.sha256.len() == 64
+                        && evidence.sha256.bytes().all(|b| b.is_ascii_hexdigit())
+                        && !evidence.retrieved_at.is_empty()
+                        && !evidence.note.is_empty(),
+                    "Invalid zero-evidence provenance"
+                );
+                let reference = references
+                    .iter()
+                    .find(|r| r.id == proof.county)
+                    .context("Zero evidence has no county reference")?;
+                let ids: std::collections::BTreeSet<_> = reference
+                    .groups
+                    .iter()
+                    .flat_map(|g| if proof.year == 2024 { &g.old } else { &g.new })
+                    .collect();
+                let unique: std::collections::BTreeSet<_> = evidence.precincts.iter().collect();
+                ensure!(
+                    !unique.is_empty()
+                        && unique.len() == evidence.precincts.len()
+                        && unique
+                            .iter()
+                            .all(|p| ids.contains(*p) && crate::normalize(p) == ***p),
+                    "Zero evidence must identify distinct exact native precincts"
+                );
+                evidence.precincts.sort();
+            }
+        }
         Ok(Some(value))
     }
     fn apply(&self, county: &str, sources: &[Daily]) -> Vec<Daily> {
-        let mut output = sources.to_vec();
+        let mut output = strip_zero_evidence(sources);
+
         for item in self
             .observations
             .iter()
@@ -102,9 +188,63 @@ impl Recovery {
                 output.push(replacement.clone());
             }
         }
+        for proof in self.zero_proofs.iter().filter(|p| p.county == county) {
+            let evidence = &proof.evidence;
+            let valid: Vec<_> = evidence
+                .precincts
+                .iter()
+                .filter(|id| {
+                    !output.iter().any(|d| {
+                        d.date.year() == proof.year
+                            && d.date >= crate::start(proof.year)
+                            && d.date <= evidence.through
+                            && (d.counts.get(*id).is_some_and(|n| *n > 0)
+                                || d.unavailable_precincts
+                                    .iter()
+                                    .any(|p| crate::normalize(p) == **id))
+                    })
+                })
+                .cloned()
+                .collect();
+            for day in output.iter_mut().filter(|d| {
+                d.date.year() == proof.year
+                    && d.date >= crate::start(proof.year)
+                    && d.date <= evidence.through
+            }) {
+                let mut added = Vec::new();
+                for id in &valid {
+                    if let std::collections::btree_map::Entry::Vacant(cell) =
+                        day.counts.entry(id.clone())
+                    {
+                        cell.insert(0);
+                        added.push(id.clone());
+                    }
+                }
+                if !added.is_empty() {
+                    let mut support = evidence.clone();
+                    support.precincts = added;
+                    day.zero_evidence.push(support);
+                }
+            }
+        }
         output.sort_by_key(|d| (d.date, d.cumulative));
         output
     }
+}
+
+// Never let a previously derived zero survive without its currently valid proof.
+fn strip_zero_evidence(sources: &[Daily]) -> Vec<Daily> {
+    let mut output = sources.to_vec();
+    for day in &mut output {
+        for evidence in std::mem::take(&mut day.zero_evidence) {
+            for id in evidence.precincts {
+                if day.counts.get(&id) == Some(&0) {
+                    day.counts.remove(&id);
+                }
+            }
+        }
+    }
+    output
 }
 
 // A documented integer reconciliation precision, never a percentage allowance.
@@ -158,7 +298,7 @@ impl Report {
             .recovery
             .as_ref()
             .map(|r| r.apply(county, sources))
-            .unwrap_or_else(|| sources.to_vec());
+            .unwrap_or_else(|| strip_zero_evidence(sources));
         sources
             .into_iter()
             .filter(|d| matches!(d.date.year(), 2024 | 2026))
@@ -360,6 +500,8 @@ mod tests {
     #[test]
     fn matching_control_cannot_recertify_quarantined_precincts() {
         let d = Daily {
+            allow_daily_difference: None,
+            zero_evidence: Vec::new(),
             unavailable_precincts: vec!["001".into()],
             complete: true,
             county: "x".into(),
@@ -400,6 +542,8 @@ mod tests {
     #[test]
     fn incomplete_county_controls_do_not_remove_reported_precincts() {
         let d = Daily {
+            allow_daily_difference: None,
+            zero_evidence: Vec::new(),
             unavailable_precincts: Vec::new(),
             complete: false,
             county: "x".into(),
@@ -428,6 +572,8 @@ mod tests {
     #[test]
     fn historical_age_does_not_prove_an_absent_precinct_had_zero_votes() {
         let mut d = Daily {
+            allow_daily_difference: None,
+            zero_evidence: Vec::new(),
             unavailable_precincts: Vec::new(),
             complete: true,
             county: "x".into(),

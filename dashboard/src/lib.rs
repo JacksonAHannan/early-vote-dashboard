@@ -54,6 +54,10 @@ pub struct Daily {
     /// Explicitly unknown cells override counts and prohibit absent-row zero inference.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unavailable_precincts: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub zero_evidence: Vec<quality::ZeroEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allow_daily_difference: Option<bool>,
     #[serde(default)]
     pub complete: bool,
     pub county: String,
@@ -505,6 +509,8 @@ mod tests {
     fn missing_or_duplicate_days_are_not_partial_sums() {
         assert!(sum_days(&[], 2024, 4).is_err());
         let d = Daily {
+            allow_daily_difference: None,
+            zero_evidence: Vec::new(),
             unavailable_precincts: Vec::new(),
             complete: false,
             county: "x".into(),
@@ -555,6 +561,8 @@ mod recovery_tests {
     fn newer_cumulative_workbook_keeps_exact_requested_cutoff_without_allocation() {
         let through = start(2026) + chrono::Duration::days(3);
         let old = Daily {
+            allow_daily_difference: None,
+            zero_evidence: Vec::new(),
             unavailable_precincts: Vec::new(),
             complete: false,
             county: "ellis".into(),
@@ -589,6 +597,8 @@ mod recovery_tests {
     #[test]
     fn cumulative_snapshot_cannot_reconstruct_an_earlier_day() {
         let d = Daily {
+            allow_daily_difference: None,
+            zero_evidence: Vec::new(),
             unavailable_precincts: Vec::new(),
             complete: false,
             county: "x".into(),

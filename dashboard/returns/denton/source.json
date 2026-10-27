@@ -1,0 +1,24 @@
+{
+  "url": "https://assets01.aws.connect.clarityelections.com/Assets/Connect/RootPublish/denton-tx.connect.clarityelections.com/ElectionResults/2024/1124/2024_General_Election_Results_Reports.zip",
+  "sha256": "da31799c7f3692bddc073d28088a004aec2f2383a690f58a41bee44ce4d9ecfe",
+  "election_date": "2024-11-05",
+  "totals": {
+    "harris": 191503,
+    "trump": 250521
+  },
+  "method": "Official signed November16 county canvass, November5,2024 President/Vice President. Exact same 240 native precinct IDs as official 2024 geographic universe. All18 numeric columns conserve printed county totals; each row reconciles candidate votes, undervotes, overvotes and all voting methods. All94 existing TLC-derived classified precinct returns agree exactly. No geographic allocation; zero/tied presidential returns remain unclassified.",
+  "sources": [
+    {
+      "url": "https://assets01.aws.connect.clarityelections.com/Assets/Connect/RootPublish/denton-tx.connect.clarityelections.com/ElectionResults/2024/1124/2024_General_Election_Results_Reports.zip",
+      "sha256": "696dda44fa4afabd7ac1c3f9d7b5bacaed70478321b1f6e95711985e14051c48",
+      "member": "Stamped/Denton County Canvass-16-11-2024 12.59.52.pdf",
+      "member_sha256": "eb531fbe7489d43c34222b612f05216dba62fbc7091cac273c848b61c57c5191"
+    },
+    {
+      "url": "https://assets01.aws.connect.clarityelections.com/Assets/Connect/RootPublish/denton-tx.connect.clarityelections.com/ElectionResults/2024/1124/2024_General_Election_Results_Reports.zip",
+      "sha256": "696dda44fa4afabd7ac1c3f9d7b5bacaed70478321b1f6e95711985e14051c48",
+      "member": "Stamped/Denton County Cumulative-16-11-2024 12.42.02.pdf",
+      "member_sha256": "82647a8409d390e8d1348ace3b846034a3b6b6e818239fbdeeb67f88d7b6ded5"
+    }
+  ]
+}

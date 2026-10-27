@@ -122,6 +122,8 @@ fn days_from(
             .remove(&day)
             .with_context(|| format!("county ordinary roster missing {day}"))?;
         output.push(Daily {
+            zero_evidence: Vec::new(),
+            allow_daily_difference: None,
             unavailable_precincts: Vec::new(),
             complete: false,
             county: reference.id.clone(),
@@ -209,6 +211,8 @@ impl CountyRoster {
                 continue;
             }
             output.push(Daily {
+                zero_evidence: Vec::new(),
+                allow_daily_difference: None,
                 unavailable_precincts: bad_cells
                     .map(|cells| cells.keys().cloned().collect())
                     .unwrap_or_default(),
@@ -277,6 +281,108 @@ fn dallas_rows(rows: &[Vec<String>], year: i32, n: u32) -> Result<CountyRoster> 
         roster.record(id, day, field(row, &headers, "PRECINCT"), false)?;
     }
     Ok(roster)
+}
+
+fn dallas_blank_candidates(
+    rows: &[Vec<String>],
+    year: i32,
+    n: u32,
+) -> Result<BTreeMap<NaiveDate, BTreeSet<String>>> {
+    let (first, headers) = header(rows, &["DATE VOTED", "PRECINCT", "SOS VOTERID"])?;
+    let mut frequencies = BTreeMap::<String, usize>::new();
+    let mut candidates = BTreeMap::<NaiveDate, BTreeSet<String>>::new();
+    for row in rows.iter().skip(first + 1) {
+        let raw = field(row, &headers, "DATE VOTED");
+        if raw.is_empty() {
+            continue;
+        }
+        let day = date(raw)?;
+        let identity = field(row, &headers, "SOS VOTERID");
+        if identity.is_empty() {
+            continue;
+        }
+        // Count every date/known precinct in the workbook, not just candidates.
+        *frequencies.entry(identity.into()).or_default() += 1;
+        if day >= start(year)
+            && day < start(year) + chrono::Duration::days(i64::from(n))
+            && normalize(field(row, &headers, "PRECINCT")).is_empty()
+        {
+            candidates.entry(day).or_default().insert(identity.into());
+        }
+    }
+    for identities in candidates.values_mut() {
+        identities.retain(|identity| frequencies.get(identity) == Some(&1));
+    }
+    candidates.retain(|_, identities| !identities.is_empty());
+    Ok(candidates)
+}
+
+fn dallas_apply_identities(
+    roster: &mut CountyRoster,
+    day: NaiveDate,
+    candidates: &BTreeSet<String>,
+    identities: &BTreeMap<String, String>,
+    universe: &BTreeSet<String>,
+) -> usize {
+    let mut recovered = 0;
+    for identity in candidates {
+        let Some(target) = identities.get(identity).filter(|p| universe.contains(*p)) else {
+            continue;
+        };
+        let Some((when, precinct)) = roster.voters.get_mut(identity) else {
+            continue;
+        };
+        if *when == day && precinct == "UNASSIGNED" {
+            *precinct = target.clone();
+            recovered += 1;
+        }
+    }
+    recovered
+}
+
+async fn dallas_recover_precincts(
+    client: &reqwest::Client,
+    reference: &Reference,
+    rows: &[Vec<String>],
+    roster: &mut CountyRoster,
+    year: i32,
+    n: u32,
+) -> Result<BTreeMap<NaiveDate, (String, String, usize)>> {
+    let candidates = dallas_blank_candidates(rows, year, n)?;
+    let universe = reference
+        .groups
+        .iter()
+        .flat_map(|g| g.new.iter().cloned())
+        .collect();
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(4));
+    let mut jobs = tokio::task::JoinSet::new();
+    for (day, identities) in candidates {
+        let client = client.clone();
+        let reference = reference.clone();
+        let semaphore = semaphore.clone();
+        jobs.spawn(async move {
+            let _permit = semaphore.acquire().await.unwrap();
+            let result = tokio::time::timeout(
+                std::time::Duration::from_secs(60),
+                crate::fetch::fetch_precinct_identities(&client, &reference, day),
+            )
+            .await;
+            (day, identities, result)
+        });
+    }
+    let mut proofs = BTreeMap::new();
+    while let Some(result) = jobs.join_next().await {
+        // Optional enrichment cannot discard otherwise usable native observations.
+        let Ok((day, candidates, Ok(Ok(source)))) = result else {
+            continue;
+        };
+        let recovered =
+            dallas_apply_identities(roster, day, &candidates, &source.unique, &universe);
+        if recovered > 0 {
+            proofs.insert(day, (source.source, source.sha256, recovered));
+        }
+    }
+    Ok(proofs)
 }
 
 fn native_series(raw: &[u8], county: &str, through: NaiveDate) -> Result<Vec<Daily>> {
@@ -361,6 +467,82 @@ async fn native_county(county: &str, n: u32) -> Result<Vec<Daily>> {
     native_series(&output.stdout, county, through)
 }
 
+fn tarrant_anchor(raw: &[u8], reference: &Reference, through: NaiveDate) -> Result<Daily> {
+    let mut values: Vec<Daily> = serde_json::from_slice(raw)?;
+    ensure!(
+        values.len() == 1,
+        "Tarrant anchor must have exactly one cutoff"
+    );
+    let mut anchor = values.remove(0);
+    ensure!(
+        anchor.county == "tarrant"
+            && anchor.county == reference.id
+            && anchor.date == through
+            && anchor.date.year() == 2026
+            && anchor.cumulative
+            && anchor.allow_daily_difference == Some(false),
+        "Tarrant source is not a cumulative-only exact-cutoff anchor"
+    );
+    ensure!(
+        anchor.source
+            == "https://www.tarrantcountytx.gov/content/dam/main/elections/2026/1126/ev_reports/Early_voting_in_person_report.zip"
+            && anchor.sha256.len() == 64
+            && anchor.sha256.bytes().all(|b| b.is_ascii_hexdigit())
+            && !anchor.note.is_empty(),
+        "Tarrant anchor provenance missing"
+    );
+    anchor.complete = false;
+    anchor.zero_evidence.clear();
+    anchor.unavailable_precincts.sort();
+    anchor.unavailable_precincts.dedup();
+    anchor
+        .counts
+        .retain(|p, _| !anchor.unavailable_precincts.contains(p));
+    let universe: BTreeSet<_> = reference.groups.iter().flat_map(|g| g.new.iter()).collect();
+    ensure!(
+        anchor
+            .counts
+            .iter()
+            .any(|(p, n)| *n > 0 && universe.contains(p)),
+        "Tarrant anchor has no verified native precinct counts"
+    );
+    Ok(anchor)
+}
+
+async fn tarrant(client: &reqwest::Client, reference: &Reference, n: u32) -> Result<Vec<Daily>> {
+    ensure!((1..=12).contains(&n), "invalid Tarrant cutoff");
+    let mut days = Vec::new();
+    let mut identities = BTreeSet::new();
+    for offset in 0..n {
+        let date = start(2026) + chrono::Duration::days(i64::from(offset));
+        // Retain every dated SOS report, independently of optional county anchor availability.
+        if let Ok(day) = crate::fetch::fetch_state(client, reference, date, &mut identities).await {
+            days.push(day);
+        }
+    }
+    let through = start(2026) + chrono::Duration::days(i64::from(n - 1));
+    let child = tokio::process::Command::new("uv")
+        .args(["run", "--quiet", "--with", "curl-cffi==0.16.3", "python"])
+        .arg(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("scripts/collect_tarrant_anchor.py"),
+        )
+        .args(["--through", &through.to_string()])
+        .kill_on_drop(true)
+        .output();
+    if let Ok(Ok(output)) = tokio::time::timeout(std::time::Duration::from_secs(180), child).await
+        && output.status.success()
+        && let Ok(anchor) = tarrant_anchor(&output.stdout, reference, through)
+    {
+        days.push(anchor);
+    }
+    ensure!(
+        !days.is_empty(),
+        "No dated Tarrant SOS sources or verified cumulative anchor"
+    );
+    Ok(days)
+}
+
 pub async fn collect(
     client: &reqwest::Client,
     r: &Reference,
@@ -371,6 +553,7 @@ pub async fn collect(
         "travis" => travis(client, r, year, n).await,
         "dallas" => dallas(client, r, year, n).await,
         "harris" => harris(client, r, year, n).await,
+        "tarrant" if year == 2026 => tarrant(client, r, n).await,
         "nueces" if year == 2026 => nueces(client, r, n).await,
         "fortbend" if crate::fort_bend::supports(year) => {
             crate::fort_bend::collect(client, r, year, n).await
@@ -392,6 +575,7 @@ pub fn has_adapter(id: &str, year: i32) -> bool {
                 "hays",
                 "ellis",
                 "nueces",
+                "tarrant",
                 "waller",
                 "washington",
                 "sanpatricio",
@@ -564,14 +748,31 @@ async fn dallas(client: &reqwest::Client, r: &Reference, year: i32, n: u32) -> R
     let raw = download(client, &url, None).await?;
     let hash = format!("{:x}", Sha256::digest(&raw));
     let rows = workbook(raw)?;
-    dallas_rows(&rows, year, n)?.days(
+    let mut roster = dallas_rows(&rows, year, n)?;
+    let proofs = if year == 2026 {
+        dallas_recover_precincts(client, r, &rows, &mut roster, year, n)
+            .await
+            .unwrap_or_default()
+    } else {
+        BTreeMap::new()
+    };
+    let mut days = roster.days(
         r,
         year,
         n,
         &url,
         &hash,
         "County cumulative in-person workbook, filtered by DATE VOTED and residence PRECINCT. Unique voter IDs; blanks remain unassigned. Source totals are checked against independently dated county controls; unsupported cells remain unavailable.",
-    )
+    )?;
+    for day in &mut days {
+        if let Some((source, sos_hash, recovered)) = proofs.get(&day.date) {
+            let manifest = serde_json::json!({"method":"unique-exact-voter-identity-precinct-enrichment-v1",
+                "native_sha256":hash,"same_date_sos_sha256":sos_hash});
+            day.sha256 = format!("{:x}", Sha256::digest(serde_json::to_vec(&manifest)?));
+            day.note.push_str(&format!(" Exact-identity precinct recovery: {recovered} blank native residence precincts resolved using globally unique native SOS VOTERID and one unique same-date in-person SOS ID_VOTER with a known native residence precinct. Known native precincts, vote dates, total rows and quarantine rules are preserved. Native source {url} SHA256 {hash}; same-date identity source {source} SHA256 {sos_hash}. Derived SHA256 hashes the canonical input-hash/method manifest. No voter identities retained."));
+        }
+    }
+    Ok(days)
 }
 async fn hays(client: &reqwest::Client, r: &Reference, n: u32) -> Result<Vec<Daily>> {
     let url = "https://www.hayscountytx.gov/DocumentCenter/View/5455?bidId=";
@@ -696,6 +897,8 @@ async fn ellis_native(client: &reqwest::Client, r: &Reference) -> Result<Vec<Dai
     }
     ensure!(!counts.is_empty(), "Ellis workbook has no ordinary voters");
     Ok(vec![Daily {
+        zero_evidence: Vec::new(),
+        allow_daily_difference: None,
         unavailable_precincts: Vec::new(),
         complete: false,
         county: r.id.clone(),
@@ -799,6 +1002,42 @@ mod tests {
     }
 
     #[test]
+    fn tarrant_anchor_parser_requires_exact_cutoff_and_disables_daily_difference() {
+        let mut reference = roster_reference();
+        reference.id = "tarrant".into();
+        reference.groups = vec![crate::Group {
+            old: vec!["1".into()],
+            new: vec!["1".into()],
+        }];
+        let through = start(2026) + chrono::Duration::days(7);
+        let report = serde_json::json!({"county":"tarrant","date":through,"counts":{"1":10},
+            "source":"https://www.tarrantcountytx.gov/content/dam/main/elections/2026/1126/ev_reports/Early_voting_in_person_report.zip",
+            "sha256":"a".repeat(64),"retrieved_at":"2026-10-27T09:50:00Z","cumulative":true,
+            "complete":true,"allow_daily_difference":false,"note":"Exact dated independent cutoff proof."});
+        let parse = |value: &serde_json::Value| {
+            tarrant_anchor(
+                &serde_json::to_vec(&vec![value]).unwrap(),
+                &reference,
+                through,
+            )
+        };
+        let valid = parse(&report).unwrap();
+        assert!(!valid.complete);
+        assert_eq!(valid.allow_daily_difference, Some(false));
+        for (field, value) in [
+            ("allow_daily_difference", serde_json::Value::Null),
+            ("allow_daily_difference", true.into()),
+            ("cumulative", false.into()),
+            ("date", "2026-10-25".into()),
+            ("source", "https://example.com".into()),
+        ] {
+            let mut invalid = report.clone();
+            invalid[field] = value;
+            assert!(parse(&invalid).is_err(), "{field}");
+        }
+    }
+
+    #[test]
     fn montgomery_blank_ids_quarantine_only_the_affected_date_and_precinct() {
         let mut roster = CountyRoster::default();
         montgomery_rows(
@@ -850,6 +1089,91 @@ mod tests {
         assert!(days[0].note.contains("1 rows with blank identifiers"));
         assert_eq!(days[1].counts, Counts::from([("1".into(), 1)]));
         assert!(!days[1].note.contains("blank identifiers"));
+    }
+
+    #[test]
+    fn dallas_exact_identity_recovers_only_blank_precincts_in_real_roster_parser() {
+        let rows: Vec<Vec<String>> = [
+            ["DATE VOTED", "PRECINCT", "SOS VOTERID", "IDNUMBER"],
+            ["10/19/2026", "001", "known", ""],
+            ["10/19/2026", "", "recover", ""],
+            ["10/19/2026", "", "foreign", ""],
+            ["10/19/2026", "", "reused", ""],
+            ["10/20/2026", "002", "reused", ""],
+            ["10/19/2026", "003", "quarantined", ""],
+            ["10/19/2026", "003", "", ""],
+        ]
+        .into_iter()
+        .map(|row| row.into_iter().map(String::from).collect())
+        .collect();
+        // The known conflicting cross-day ID remains a hard native parser error.
+        assert!(dallas_rows(&rows, 2026, 2).is_err());
+        let candidates = dallas_blank_candidates(&rows, 2026, 1).unwrap();
+        assert!(!candidates[&start(2026)].contains("reused"));
+        let mut roster = dallas_rows(&rows[..5], 2026, 1).unwrap();
+        let universe = BTreeSet::from(["1".into(), "2".into(), "3".into()]);
+        let identities = BTreeMap::from([
+            ("recover".into(), "2".into()),
+            ("known".into(), "2".into()),
+            ("foreign".into(), "UNKNOWN".into()),
+        ]);
+        assert_eq!(
+            dallas_apply_identities(
+                &mut roster,
+                start(2026),
+                &candidates[&start(2026)],
+                &identities,
+                &universe
+            ),
+            1
+        );
+        let days = roster
+            .days(&roster_reference(), 2026, 1, "official", "hash", "Scope.")
+            .unwrap();
+        assert_eq!(
+            days[0].counts,
+            Counts::from([("1".into(), 1), ("2".into(), 1), ("UNASSIGNED".into(), 2)])
+        );
+        assert!(!days[0].complete);
+    }
+
+    #[test]
+    fn dallas_enrichment_preserves_native_quarantine_and_unavailable_sos_counts() {
+        let rows: Vec<Vec<String>> = [
+            ["DATE VOTED", "PRECINCT", "SOS VOTERID", "IDNUMBER"],
+            ["10/19/2026", "001", "known", ""],
+            ["10/19/2026", "", "recover", ""],
+            ["10/19/2026", "003", "quarantined", ""],
+            ["10/19/2026", "003", "", ""],
+        ]
+        .into_iter()
+        .map(|row| row.into_iter().map(String::from).collect())
+        .collect();
+        let candidates = dallas_blank_candidates(&rows, 2026, 1).unwrap();
+        let universe = BTreeSet::from(["1".into(), "3".into()]);
+        for identities in [
+            BTreeMap::new(),
+            BTreeMap::from([("recover".into(), "3".into())]),
+        ] {
+            let mut roster = dallas_rows(&rows, 2026, 1).unwrap();
+            let assigned = dallas_apply_identities(
+                &mut roster,
+                start(2026),
+                &candidates[&start(2026)],
+                &identities,
+                &universe,
+            );
+            let days = roster
+                .days(&roster_reference(), 2026, 1, "official", "hash", "Scope.")
+                .unwrap();
+            assert_eq!(days[0].counts.get("1"), Some(&1));
+            assert!(!days[0].counts.contains_key("3"));
+            assert_eq!(days[0].unavailable_precincts, vec!["3"]);
+            assert_eq!(
+                days[0].counts.get("UNASSIGNED").copied().unwrap_or(0),
+                u64::from(assigned == 0)
+            );
+        }
     }
 
     #[test]
@@ -1036,7 +1360,7 @@ async fn harris(client: &reqwest::Client, r: &Reference, year: i32, n: u32) -> R
     let bytes = download(client, source, None).await?;
     let hash = format!("{:x}", Sha256::digest(&bytes));
     let stamp = chrono::Utc::now().to_rfc3339();
-    Ok(harris_counts(&bytes, year, n)?.into_iter().map(|(date, counts)| Daily { unavailable_precincts: Vec::new(), complete: false,
+    Ok(harris_counts(&bytes, year, n)?.into_iter().map(|(date, counts)| Daily { zero_evidence: Vec::new(), allow_daily_difference: None, unavailable_precincts: Vec::new(), complete: false,
         county: r.id.clone(), date, counts, source: source.into(), sha256: hash.clone(), retrieved_at: stamp.clone(), cumulative: false,
         note: "Official Harris County dedicated in-person early-voting ZIP; CSV ActivityDate fixes the date. StateVoterID and county IDNumber are unique within/across archive members. Mail/election-day sources excluded. Native county reports used consistently for both cycles; they differ from SOS aggregates, including the incomplete October 23, 2026 SOS roster. No voter records retained or missing votes allocated.".into(),
     }).collect())
@@ -1219,7 +1543,7 @@ async fn nueces(client: &reqwest::Client, r: &Reference, n: u32) -> Result<Vec<D
     ensure!(output.status.success(), "Nueces PDF text extraction failed");
     let text = String::from_utf8(output.stdout).context("Nueces extracted text is not UTF-8")?;
     let stamp = chrono::Utc::now().to_rfc3339();
-    Ok(nueces_counts(&text,n)?.into_iter().map(|(date,counts)| Daily { unavailable_precincts: Vec::new(), complete: false, county:r.id.clone(),date,counts,source:source.clone(),sha256:hash.clone(),retrieved_at:stamp.clone(),cumulative:false,note:"Official Nueces County dedicated in-person daily roster PDF, discovered from the current county page. Every parsed row is Early Voted with a native date and unique VUID; raw PDF/text remain only in anonymous pipes/memory. All dates use the county source consistently; native precinct labels absent from the 26P proxy remain unassigned. No votes are allocated to close SOS or map discrepancies.".into() }).collect())
+    Ok(nueces_counts(&text,n)?.into_iter().map(|(date,counts)| Daily { zero_evidence: Vec::new(), allow_daily_difference: None, unavailable_precincts: Vec::new(), complete: false, county:r.id.clone(),date,counts,source:source.clone(),sha256:hash.clone(),retrieved_at:stamp.clone(),cumulative:false,note:"Official Nueces County dedicated in-person daily roster PDF, discovered from the current county page. Every parsed row is Early Voted with a native date and unique VUID; raw PDF/text remain only in anonymous pipes/memory. All dates use the county source consistently; native precinct labels absent from the 26P proxy remain unassigned. No votes are allocated to close SOS or map discrepancies.".into() }).collect())
 }
 #[cfg(test)]
 mod nueces_tests {

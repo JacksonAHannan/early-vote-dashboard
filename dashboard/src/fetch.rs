@@ -238,7 +238,7 @@ pub async fn fetch_state(
             .iter()
             .find(|s| s.year == 2024 && s.date == date)
     {
-        return Ok(Daily { unavailable_precincts: Vec::new(), complete: false, county: reference.id.clone(), date, counts: Counts::new(), source: source.url.clone(), sha256: source.sha256.clone(), retrieved_at: source.retrieved_at.clone(), cumulative: false, note: "Official dated Texas SOS historical county aggregate explicitly confirms zero in-person votes. An empty roster alone is never treated as zero; current unconfirmed zeros are excluded.".into() });
+        return Ok(Daily { zero_evidence: Vec::new(), allow_daily_difference: None, unavailable_precincts: Vec::new(), complete: false, county: reference.id.clone(), date, counts: Counts::new(), source: source.url.clone(), sha256: source.sha256.clone(), retrieved_at: source.retrieved_at.clone(), cumulative: false, note: "Official dated Texas SOS historical county aggregate explicitly confirms zero in-person votes. An empty roster alone is never treated as zero; current unconfirmed zeros are excluded.".into() });
     }
     let (url, form) = if date.format("%Y").to_string() == "2024" {
         (
@@ -287,6 +287,8 @@ pub async fn fetch_state(
         note.push_str(" A reviewed hash-pinned repeated CSV record is counted once; differing records and additional duplicates still fail validation. Control shortfalls remain unknown rather than inferred zeros.");
     }
     Ok(Daily {
+        zero_evidence: Vec::new(),
+        allow_daily_difference: None,
         unavailable_precincts: Vec::new(),
         complete: false,
         county: reference.id.clone(),
@@ -323,6 +325,78 @@ fn identical_row_policy(county: &str, date: &str, sha256: &str) -> usize {
         _ => 0,
     }
 }
+/// Private, memory-only identity associations used to recover blank county
+/// residence precincts. This type deliberately has no serde/Debug implementation.
+pub(crate) struct PrecinctIdentities {
+    pub unique: BTreeMap<String, String>,
+    pub source: String,
+    pub sha256: String,
+}
+
+fn unique_precinct_identities(bytes: &[u8]) -> Result<BTreeMap<String, String>> {
+    let mut reader = csv::ReaderBuilder::new()
+        .trim(csv::Trim::All)
+        .from_reader(bytes);
+    let headers = reader.headers()?.clone();
+    let column = |name: &str| {
+        headers
+            .iter()
+            .position(|h| h.trim_start_matches('\u{feff}') == name)
+            .with_context(|| format!("missing identity source field {name}"))
+    };
+    let method = column("VOTING_METHOD")?;
+    let id = column("ID_VOTER")?;
+    let precinct = column("PRECINCT")?;
+    let mut seen = BTreeSet::new();
+    let mut unique = BTreeMap::new();
+    let mut records = 0;
+    for row in reader.records() {
+        let row = row?;
+        if &row[method] != "IN-PERSON" {
+            continue;
+        }
+        records += 1;
+        let identity = row[id].trim();
+        if identity.is_empty() {
+            continue;
+        }
+        if seen.insert(identity.to_string()) {
+            unique.insert(identity.to_string(), normalize(&row[precinct]));
+        } else {
+            // Even byte-identical repeated IDs cannot independently identify a row.
+            unique.remove(identity);
+        }
+    }
+    ensure!(records > 0, "identity source has no in-person observations");
+    Ok(unique)
+}
+
+pub(crate) async fn fetch_precinct_identities(
+    client: &reqwest::Client,
+    reference: &Reference,
+    date: NaiveDate,
+) -> Result<PrecinctIdentities> {
+    ensure!(
+        date.format("%Y").to_string() == "2026",
+        "identity recovery requires current election"
+    );
+    let source = current_state_url(reference, date)?;
+    let response = download(client, &source, None).await?;
+    let json: serde_json::Value =
+        serde_json::from_slice(&response).context("identity source is not JSON")?;
+    let encoded = json["upload"]
+        .as_str()
+        .context("identity source has no upload")?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded.rsplit(',').next().unwrap_or(encoded))
+        .context("decode identity source CSV")?;
+    Ok(PrecinctIdentities {
+        unique: unique_precinct_identities(&bytes)?,
+        source,
+        sha256: format!("{:x}", Sha256::digest(&bytes)),
+    })
+}
+
 fn current_state_url(reference: &Reference, date: NaiveDate) -> Result<String> {
     let mut url = reqwest::Url::parse(
         "https://goelect.txelections.civixapps.com/api-ivis-system/api/v1/getFileByFormat",
@@ -340,6 +414,19 @@ fn current_state_url(reference: &Reference, date: NaiveDate) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn identity_recovery_requires_one_same_date_in_person_row_per_identifier() {
+        let rows = b"ID_VOTER,VOTING_METHOD,PRECINCT\na,IN-PERSON,001\nb,IN-PERSON,2\nb,IN-PERSON,2\nb,IN-PERSON,3\na,MAIL,99\nc,IN-PERSON,\n,IN-PERSON,4\n";
+        let identities = unique_precinct_identities(rows).unwrap();
+        assert_eq!(
+            identities,
+            BTreeMap::from([("a".into(), "1".into()), ("c".into(), "".into())])
+        );
+        assert!(
+            unique_precinct_identities(b"ID_VOTER,VOTING_METHOD,PRECINCT\na,MAIL,1\n").is_err()
+        );
+        assert!(unique_precinct_identities(b"ID_VOTER,PRECINCT\na,1\n").is_err());
+    }
     async fn mock_downloads(
         responses: Vec<&'static [u8]>,
     ) -> (String, tokio::task::JoinHandle<Vec<String>>) {

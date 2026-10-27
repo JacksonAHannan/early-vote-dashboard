@@ -11,6 +11,8 @@ impl Drop for Fixture {
 }
 fn source(county: &str, year: i32, values: &[(&str, u64)]) -> Daily {
     Daily {
+        allow_daily_difference: None,
+        zero_evidence: Vec::new(),
         unavailable_precincts: Vec::new(),
         county: county.into(),
         date: texas_turnout::start(year),

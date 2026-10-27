@@ -1,0 +1,20 @@
+{
+  "url": "https://www.fortbendcountytx.gov/sites/default/files/document-central/document-central/elections-documents/elections-results/2024/FBC-Canvass2.pdf",
+  "sha256": "3188148fab00163e3855b0dca5ebe3b79ffc758a37d09176e8a6debffd8ae4a7",
+  "election_date": "2024-11-05",
+  "totals": {
+    "harris": 179310,
+    "trump": 173592
+  },
+  "method": "Official native precinct canvass presidential rows, independently equal to official native precinct report TOTAL and sum ofElectionDay+Absentee+EarlyVoting for every candidate in all175precincts. Exact4digit native precinct headings agree with existing175oldreferenceIDs. Both county presidential totals conserve. No VTD interpolation, geographic allocation, or turnout alteration.",
+  "sources": [
+    {
+      "url": "https://www.fortbendcountytx.gov/sites/default/files/document-central/document-central/elections-documents/elections-results/2024/FBC-Canvass2.pdf",
+      "sha256": "044baf2bf593b3f97abaff205d15c329bf714a6f2214bf6c0d273f27d9885663"
+    },
+    {
+      "url": "https://www.fortbendcountytx.gov/sites/default/files/document-central/document-central/elections-documents/elections-results/2024/FBC-Precinct-Reports3.pdf",
+      "sha256": "72adbd22c4cc93e90231642e0f0965647b34fc80d8f90742cdd5146032b4a1ad"
+    }
+  ]
+}

@@ -337,6 +337,8 @@ pub async fn collect(
     let notes = availability_notes(&counts, &controls, year, n)?;
     let retrieved = Utc::now().to_rfc3339();
     Ok(notes.into_iter().map(|(date, availability)| Daily {
+        allow_daily_difference: None,
+            zero_evidence: Vec::new(),
         unavailable_precincts: Vec::new(), complete: false,
         county: r.id.clone(), date, counts: counts.remove(&date).unwrap(),
         source: roster_url.clone(), sha256: roster_sha.clone(), retrieved_at: retrieved.clone(),
