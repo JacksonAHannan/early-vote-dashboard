@@ -63,8 +63,9 @@ All per-date SOS hashes and aggregate destination counts are retained in
 `analysis/large-county-recovery/harris-dallas/dallas-*-enrichment.json` and the
 recovery edition's source notes.
 
-All twelve enriched 2024 totals exactly match independent county controls.
-The current native totals remain
+At probe time, all twelve enriched 2024 totals matched the retained independent
+county controls. Final qualification re-downloads these controls; later revisions
+and their effects on zero inference are recorded below. The current native totals remain
 `77854, 65084, 56092, 49469, 54345, 36613, 19183, 44140`.
 Current Day 1 remains one below its 77,855 control. The Oct 23 precinct 2130,
 Oct 24 precinct 4640, and Oct 26 precinct 1040 cells remain quarantined.
