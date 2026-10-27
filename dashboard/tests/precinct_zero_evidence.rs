@@ -174,3 +174,31 @@ fn a_cumulative_only_anchor_never_creates_same_day_votes_from_another_source() {
     values.push(daily(2, json!({"1":3})));
     assert_eq!(matching::counts(&values, 2026, 2, false).unwrap()["1"], 3);
 }
+
+#[test]
+fn reviewed_cutoff_identity_correction_replaces_only_the_disproved_tarrant_anchor() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let report = quality::Report::load(&root).unwrap();
+    let edition: quality::Recovery =
+        serde_json::from_str(include_str!("../recovery/texas-20261027.json")).unwrap();
+    let correction = edition
+        .observations
+        .iter()
+        .find(|x| x.source.county == "tarrant")
+        .unwrap();
+    let mut stale = correction.source.clone();
+    stale.sha256 = correction.supersedes_sha256[0].clone();
+    stale.counts.insert("1060".into(), 999);
+    stale.unavailable_precincts.clear();
+    let corrected = report.sources("tarrant", &[stale.clone()]);
+    assert!(!corrected[0].counts.contains_key("1060"));
+    assert!(
+        corrected[0]
+            .unavailable_precincts
+            .contains(&"1060".to_string())
+    );
+    assert_eq!(corrected[0].allow_daily_difference, Some(false));
+    stale.sha256 = "f".repeat(64);
+    let revised = report.sources("tarrant", &[stale]);
+    assert_eq!(revised[0].counts.get("1060"), Some(&999));
+}

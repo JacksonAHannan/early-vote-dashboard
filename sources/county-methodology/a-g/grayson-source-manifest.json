@@ -1,0 +1,14 @@
+[
+  {
+    "path": "sources/county-methodology/a-g/grayson-2024-precinct.pdf",
+    "source": "https://www.co.grayson.tx.us/page/open/3389/0/Official%20Pct.%20by%20Pct.%20Summary%20Results%20General%2011.5.24%20Election",
+    "sha256": "0b01141401a82dd96b2667294632347ea28e44d0fc123236f1e24457dd589118",
+    "bytes": 3082019
+  },
+  {
+    "path": "sources/county-methodology/a-g/grayson-2024-summary.pdf",
+    "source": "https://www.co.grayson.tx.us/page/open/3389/0/Official%20Results%20Summary%20Report%20General%2011.5.24%20Election",
+    "sha256": "577c038b8ed1e5df2dd56074537677b80691e3db9da601a61866b81a8e8cc0cc",
+    "bytes": 152189
+  }
+]

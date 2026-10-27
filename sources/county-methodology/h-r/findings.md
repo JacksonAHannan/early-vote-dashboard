@@ -1,0 +1,39 @@
+# H–R county methodology review, October 27, 2026
+
+The assigned 107 counties were screened against the pinned 16:30 UTC snapshot. The ledger has exactly one row for each county, all eight cutoff pairs when present, the full old/new native precinct universes, every retained source URL/hash, native/unknown count conservation, missing dates, available method-specific SOS totals, and classification exclusions. Sixteen counties have paired observations for all native precincts on all eight cutoffs. That is an observation-coverage statement, not certification that every vote within each precinct was published. Hill is the sole unadmitted county in this assignment.
+
+The complete aggregate ledger is `analysis/county-methodology/h-r/ledger.json`. `screen.py` reproduces its baseline screening; the deeper source reviews below are recorded separately in the ledger. No native aliases, zero proofs, presidential references, production caches, Rust files, or running services were changed by this review agent.
+
+## Accepted implementation candidate: Panola missing-date fallback
+
+The county moved its election content to [the current Elections page](https://www.co.panola.tx.us/1201/Elections). A fresh browser-TLS download exposes November 2026 Day 1–8 PDF links. Ordinary requests returned HTTP 403 and a cached web-open result still omitted the new section. The current landing-page hash is retained in the source proof. The native documents are `/DocumentCenter/View/1924` through `1931`.
+
+The official SOS files for October 20 and 21 contain only 8 and 13 mail records, respectively, and no in-person records. Mail-only downloads cannot establish zero in-person turnout. These two dates previously prevented every subsequent cumulative Panola precinct comparison.
+
+The promoted `dashboard/scripts/collect_panola.py` provides the requested `--county panola --through YYYY-MM-DD --output PATH` interface; omitting output emits the complete Daily JSON array. It reuses the established native collector's download, PDF text conversion, identity deduplication, quarantine and aggregation. It validates county 183, election 53815, the exact export date, both event-method codes `EV`, each voting date, a native full-code field and the batch trailer. No split label is truncated. Full-code aliases are proved by unique, same-date voter identifiers against official SOS residence precincts, considering every observed target—including foreign targets—before acceptance. Raw records and identifiers remain in memory.
+
+The printed VRH exports contain repeated/overlapping rows. Poppler can join page fragments with form feeds; the first explicit `TPanola` trailer bounds the actual batch. Valid unique 10-digit identifiers plus blank/short-identifier rows exactly reconcile each native trailer. Blank/short IDs, conflicting identities and ambiguous aliases preserve unavailable cells; they never become zeros. Native trailer totals are 604, 606, 524, 410, 475, 189, 98 and 438. These are native report controls, not independent check-in certification.
+
+All eight dates passed the live collector. Quarantines are substantial: the missing-date fallback retains 42 mapped votes across precincts 12, 14, 19 and 22 on October 20, and 22 mapped votes across precincts 9 and 14 on October 21. Four and eight additional unresolved votes remain `UNASSIGNED`. Current-side cumulative intersection is precinct 14 from Day 3 through Day 8. Keep all already usable SOS dates; replace only missing dates with these bounded native observations. Do not replace the existing SOS sources with the much narrower quarantined native files.
+
+The complete source/alias manifest is embedded in the Daily notes and derived source digest; original PDF hashes remain separately recorded. `analysis/county-methodology/h-r/panola-validation.json` contains every date's counts, identity diagnostics and source digest. `panola-native-candidate.json` contains the full eight-date Daily array.
+
+## Rejected shortcuts and remaining publication gaps
+
+| County | Finding | Next action |
+|---|---|---|
+| Hunt | Day 1 has 13/39 paired native precincts. Current labels include terminal dashes. A pinned exact-ID audit joins 1,792 SOS rows to the county's full precinct codes; each of 38 observed SOS labels has a unique native-prefix candidate. The county panel contains 1,808 valid ordinary IDs versus 1,827 SOS records, and 35 SOS rows do not join. Prefix structure alone is not an approved native alias. | Obtain an explicit official full-code/native-precinct crosswalk. Keep all unmatched/ambiguous targets; do not globally strip dashes. |
+| Hopkins | Day 1 has 3/21 paired native precincts. County PDFs use the same detailed `1-CS`, `1-SS` and related labels as the SOS. Merely importing them does not establish a native crosswalk. The scanned ballot preview supplies no explicit equivalence. | Obtain a county split-to-election-precinct table. |
+| Hill | A new 68-page county history report contains 5,903 records but no residence precinct field. It has Polling Place and Ballot Style fields. | Keep unadmitted until an explicit native precinct source or complete certified style/precinct equivalence is available. |
+| Hall | October 21 has no valid CSV payload. Retained current labels are native; this is not a subdivision-normalization problem. | Recover that dated roster or a literal completed county zero control. |
+| Liberty | The retained foreign `1A`, `8A`, `10A`, `19A` labels contain 2,925 votes. Official prior county precinct returns/canvasses explicitly identify `10A`/`19A` as precincts. Letter stripping can merge real election precincts. | Recover current native geography or an explicit boundary crosswalk. |
+| Rusk | Fresh official October 26 data still contains only two in-person records. The county page links the SOS for daily reports and supplies no independent native roster/control. | Treat this as unverified publication scope; preserve a prior completed edition if a partial revision arrives. |
+| Real | Fresh official October 23 data still contains ten in-person records after earlier daily totals of 161, 133, 143 and 91. No current native turnout source appears on the county election page. | Find an independent completed roster/control; do not infer zeros for later missing dates. |
+
+Harris is already 1,224/1,224 paired on Days 1 and 2 in this pinned snapshot. Earlier morning missing-precinct counts are obsolete. Later cutoffs and classification exclusions remain distinct issues.
+
+## Verification
+
+`python -m unittest discover -s sources/county-methodology/h-r -p 'test_method_h_r*.py' -v` passed 15 tests in 1.360 seconds against the promoted helper, and all owned Python files plus the helper passed compilation. Tests cover all 107 county rows, native/unknown count conservation, foreign-target and duplicate-ID alias rejection, mail-only source behavior, changed pinned PDF editions, real form-feed boundaries, first-trailer bounds, blank/short identity quarantine, wrong dates/elections/methods, source-count reconciliation, and isolated date failure. The form-feed, blank-ID, overlapping-trailer and trailer-count tests were observed failing against the actual parser before their corresponding fixes. The initial missing-module harness failure was not counted as parser evidence.
+
+All eight live Panola sources passed the collector and trailer reconciliation; no raw voter files are persisted. After parent promotion, the parent explicitly authorized this agent's final manifest-only edit to bind all native PDF URLs/hashes and failed-date proof statuses. That helper version's SHA256 is `d6ff57211babe932d7938acfda6ab6aa3b22c2ac5251b47f5295e2ae8f8bfbb3`; the parent owns its final live rerun and integration. No Rust, production data, service or publication actions were performed by this agent. Parent integration must retain usable SOS dates and independently verify the matching/API behavior before release.

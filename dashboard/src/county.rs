@@ -450,8 +450,11 @@ async fn native_county(county: &str, n: u32) -> Result<Vec<Daily>> {
     let through = start(2026) + chrono::Duration::days(i64::from(n - 1));
     let child = tokio::process::Command::new("python3")
         .arg(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("scripts/collect_county_native.py"),
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(match county {
+                "collin" => "scripts/collect_collin.py",
+                "panola" => "scripts/collect_panola.py",
+                _ => "scripts/collect_county_native.py",
+            }),
         )
         .args(["--county", county, "--through", &through.to_string()])
         .kill_on_drop(true)
@@ -543,6 +546,119 @@ async fn tarrant(client: &reqwest::Client, reference: &Reference, n: u32) -> Res
     Ok(days)
 }
 
+// A native alternative fills a missing date; it never displaces a usable state
+// report or borrows observations from another date.
+fn fill_missing_native_dates(values: &mut Vec<Daily>, native: Vec<Daily>) {
+    for source in native {
+        if !values
+            .iter()
+            .any(|d| d.date == source.date && !d.cumulative)
+        {
+            values.push(source);
+        }
+    }
+    values.sort_by_key(|d| (d.date, d.cumulative));
+}
+
+fn native_observations(source: &Daily, universe: &BTreeSet<String>) -> usize {
+    if source.complete
+        && source.unavailable_precincts.is_empty()
+        && source
+            .counts
+            .iter()
+            .all(|(p, n)| *n == 0 || universe.contains(p))
+    {
+        return universe.len();
+    }
+    source
+        .counts
+        .keys()
+        .filter(|p| universe.contains(*p) && !source.unavailable_precincts.contains(*p))
+        .count()
+}
+
+fn prefer_more_native_observations(
+    values: &mut Vec<Daily>,
+    native: Vec<Daily>,
+    universe: &BTreeSet<String>,
+) {
+    for source in native {
+        if let Some(index) = values
+            .iter()
+            .position(|d| d.date == source.date && d.cumulative == source.cumulative)
+        {
+            if native_observations(&source, universe)
+                > native_observations(&values[index], universe)
+            {
+                values[index] = source;
+            }
+        } else {
+            values.push(source);
+        }
+    }
+    values.sort_by_key(|d| (d.date, d.cumulative));
+}
+
+async fn collin(client: &reqwest::Client, reference: &Reference, n: u32) -> Result<Vec<Daily>> {
+    let mut values = Vec::new();
+    let mut identities = BTreeSet::new();
+    for day in 0..n {
+        let date = start(2026) + chrono::Duration::days(i64::from(day));
+        if let Ok(source) =
+            crate::fetch::fetch_state(client, reference, date, &mut identities).await
+        {
+            values.push(source);
+        }
+    }
+    let report = crate::quality::Report::load(std::path::Path::new(env!("CARGO_MANIFEST_DIR")))
+        .unwrap_or_default();
+    values = report.sources("collin", &values);
+    match native_county("collin", n).await {
+        Ok(native) => {
+            let universe = reference
+                .groups
+                .iter()
+                .flat_map(|g| g.new.iter().cloned())
+                .collect();
+            prefer_more_native_observations(
+                &mut values,
+                report.sources("collin", &native),
+                &universe,
+            );
+        }
+        Err(error) => eprintln!("Collin native date alternative: {error}"),
+    }
+    ensure!(
+        !values.is_empty(),
+        "no usable dated Collin in-person reports"
+    );
+    Ok(values)
+}
+
+async fn panola(client: &reqwest::Client, reference: &Reference, n: u32) -> Result<Vec<Daily>> {
+    let mut values = Vec::new();
+    let mut identities = BTreeSet::new();
+    for day in 0..n {
+        let date = start(2026) + chrono::Duration::days(i64::from(day));
+        if let Ok(source) =
+            crate::fetch::fetch_state(client, reference, date, &mut identities).await
+        {
+            values.push(source);
+        }
+    }
+    if values.len() < n as usize {
+        match native_county("panola", n).await {
+            Ok(native) => fill_missing_native_dates(&mut values, native),
+            Err(error) => eprintln!("Panola native missing-date fallback: {error}"),
+        }
+    }
+    ensure!(
+        !values.is_empty(),
+        "no usable dated Panola in-person reports"
+    );
+    Ok(values)
+}
+
 pub async fn collect(
     client: &reqwest::Client,
     r: &Reference,
@@ -555,6 +671,8 @@ pub async fn collect(
         "harris" => harris(client, r, year, n).await,
         "tarrant" if year == 2026 => tarrant(client, r, n).await,
         "nueces" if year == 2026 => nueces(client, r, n).await,
+        "panola" if year == 2026 => panola(client, r, n).await,
+        "collin" if year == 2026 => collin(client, r, n).await,
         "fortbend" if crate::fort_bend::supports(year) => {
             crate::fort_bend::collect(client, r, year, n).await
         }
@@ -579,6 +697,8 @@ pub fn has_adapter(id: &str, year: i32) -> bool {
                 "waller",
                 "washington",
                 "sanpatricio",
+                "collin",
+                "panola",
             ]
             .contains(&id))
 }
@@ -925,6 +1045,63 @@ mod tests {
             "retrieved_at":"2026-10-26T00:00:00Z", "note":"County roster", "complete":true,
             "cumulative":false, "unavailable_precincts":["001"]
         })
+    }
+
+    #[test]
+    fn dated_source_choice_preserves_stronger_state_dates_and_does_not_pool_labels() {
+        let mut state: Daily = serde_json::from_value(native_report()).unwrap();
+        state.counts = Counts::from([("1".into(), 10), ("2".into(), 20)]);
+        state.unavailable_precincts.clear();
+        state.complete = false;
+        let universe = BTreeSet::from(["1".into(), "2".into(), "3".into()]);
+        let mut first = state.clone();
+        first.counts.remove("2");
+        let mut second = state.clone();
+        second.date += chrono::Duration::days(1);
+        second.counts = Counts::from([("1".into(), 1)]);
+        let mut better = second.clone();
+        better.counts = Counts::from([("2".into(), 25), ("3".into(), 30)]);
+        let mut values = vec![state.clone(), second];
+        prefer_more_native_observations(&mut values, vec![first, better.clone()], &universe);
+        assert_eq!(values[0].counts, state.counts);
+        assert_eq!(values[1].counts, better.counts);
+        assert!(!values[1].counts.contains_key("1"));
+        let mut completed = state.clone();
+        completed.complete = true;
+        assert_eq!(native_observations(&completed, &universe), 3);
+        completed.counts.insert("FOREIGN".into(), 1);
+        assert_eq!(native_observations(&completed, &universe), 2);
+        completed.unavailable_precincts.push("1".into());
+        assert_eq!(native_observations(&completed, &universe), 1);
+    }
+
+    #[test]
+    fn native_fallback_fills_only_the_missing_dated_state_observation() {
+        let mut state: Daily = serde_json::from_value(native_report()).unwrap();
+        state.county = "panola".into();
+        state.source = "https://state.example/dated-report".into();
+        state.counts = Counts::from([("1".into(), 42)]);
+        state.unavailable_precincts.clear();
+        state.complete = false;
+        let mut redundant = state.clone();
+        redundant.counts.insert("1".into(), 999);
+        redundant.source = "https://county.example/different-report".into();
+        let mut missing = redundant.clone();
+        missing.date = start(2026) + chrono::Duration::days(1);
+        missing.unavailable_precincts = vec!["2".into()];
+        let mut values = vec![state.clone()];
+        fill_missing_native_dates(&mut values, vec![missing.clone(), redundant]);
+        assert_eq!(values.len(), 2);
+        assert_eq!(values[0].source, state.source);
+        assert_eq!(values[0].counts, state.counts);
+        assert_eq!(values[1].date, missing.date);
+        assert_eq!(values[1].unavailable_precincts, vec!["2"]);
+        assert!(!values[1].complete);
+        assert!(
+            !values
+                .iter()
+                .any(|d| d.date == start(2026) + chrono::Duration::days(2))
+        );
     }
 
     #[test]

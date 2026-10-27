@@ -364,3 +364,20 @@ Tarrant's county in-person archive can supply an exact-cutoff cumulative anchor 
 Denton and Fort Bend now use independently verified certified 2024 native presidential canvasses, covering 240 and 175 historical precincts. All previously loaded 94/85 returns agree exactly; 146/90 missing returns are filled without changing geometry or turnout. Versioned `returns/{county}/presidential-2024.csv` and `source.json` retain the exact counts and source document hashes. The existing native geography builder defaults to these reviewed returns; `sources/large-county-recovery/apply_native_returns.py` validates and applies them to an existing frozen reference. County totals and the complete native ID partition must reconcile, and existing votes cannot conflict. Tied/zero presidential returns and mixed common-group margin bands retain their existing treatment.
 
 This is per-date source recovery, not a promise that every precinct appears in every ratio. A zero 2024 denominator has no turnout ratio. Missing current reports, one-voter control discrepancies, ambiguous precinct codes and mixed groups retain the appropriate unavailable/unclassified status. The investigation and bounded limitations are documented under `sources/large-county-recovery/`; `tests/large_county_recovery_browser.py` checks paired/partisan recovery, cumulative-only safety, linked maps, actual PNGs and responsive layouts on native or Pages deployments.
+
+
+### County-by-county methodology audit
+
+The [254-county audit](../sources/county-methodology/report.md) records current paired coverage, classification limits, reviewed source problems and the next action for every county. Reproduce the read-only diagnostics from retained anonymous aggregates:
+
+```bash
+python3 sources/county-methodology/audit_counties.py --snapshot dashboard/data/latest.json --output analysis/county-methodology/current.json --markdown analysis/county-methodology/current.md
+```
+
+The audit uses the existing independent matching reconstruction and never changes source qualification. Its Census, primary and place diagnostics distinguish missing records from recorded zero denominators. Review dates and fresh official checks are separate from retained evidence; all 254 county totals remain distinct from the 248 currently proved precinct references.
+
+Failed SOS dates now leave cross-date identity validation unchanged; only a successful date commits its voter IDs in memory. Malformed rows and true same-date/cross-date duplicates still fail. Collin's dated ordinary county workbook is a per-date alternative to SOS: independently qualified complete reports count all native cells, otherwise only explicit unquarantined native observations count. A county file replaces a same-date SOS report only when it has more usable native observations; ties preserve SOS. Entire reports are selected, never pooled. This preserves the stronger early dates and restores the underfilled October 26 source. Provisional rows and blank/conflicting identity cells are excluded without certifying omitted zeros.
+
+Panola's county VRH PDFs fill only dates lacking a usable SOS in-person report. Exact election/event dates, batch trailers, unique-ID/blank-row conservation and all-target identity crosswalk proofs are required. All supporting native PDF and SOS hashes are bound into the derived source hash. Existing SOS dates remain unchanged; unknown labels and affected cells stay unavailable.
+
+Tarrant's cumulative anchor now includes the actual cutoff-day identity source and resolves individually proved rows before applying a unique all-target alias to unmatched rows. New evidence can invalidate earlier aliases; the reviewed October 26 correction is pinned in the existing recovery edition, while future unreviewed hashes are preserved. No daily counts are derived from this anchor. Grayson's certified native presidential returns now cover all 41 historical precincts and independently reconcile every candidate/method total; turnout and geography are unchanged.

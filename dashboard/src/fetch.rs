@@ -185,7 +185,7 @@ fn parse_state_with_ambiguity(
                     "duplicate voter identifier in state export"
                 );
                 ensure!(
-                    across_days.insert(row[id].to_string()),
+                    !across_days.contains(&row[id]),
                     "repeated in-person identifier across state daily exports"
                 );
                 *counts.entry(p).or_default() += 1;
@@ -202,6 +202,9 @@ fn parse_state_with_ambiguity(
         records > 0,
         "empty roster; missing data is not zero turnout"
     );
+    // Commit only a fully validated date. A rejected report must not reserve IDs
+    // and turn unrelated later dates into false cross-date duplicate failures.
+    across_days.extend(voters);
     Ok(counts)
 }
 pub async fn fetch_state(
@@ -414,6 +417,37 @@ fn current_state_url(reference: &Reference, date: NaiveDate) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn failed_state_date_does_not_poison_identity_validation_of_later_dates() {
+        for malformed in [
+            "ID_VOTER,VOTING_METHOD,PRECINCT\nfresh,IN-PERSON,1\nbad,UNKNOWN,2\n",
+            "ID_VOTER,VOTING_METHOD,PRECINCT\nfresh,IN-PERSON,1\n,IN-PERSON,2\n",
+            "ID_VOTER,VOTING_METHOD,PRECINCT\nfresh,IN-PERSON,1\nfresh,IN-PERSON,1\n",
+            "ID_VOTER,VOTING_METHOD,PRECINCT\nfresh,IN-PERSON,1\nprior,IN-PERSON,2\n",
+        ] {
+            let mut prior = BTreeSet::from(["prior".to_string()]);
+            assert!(parse_state(malformed.as_bytes(), &mut prior).is_err());
+            assert_eq!(prior, BTreeSet::from(["prior".to_string()]));
+            let valid = parse_state(
+                b"ID_VOTER,VOTING_METHOD,PRECINCT\nfresh,IN-PERSON,1\n",
+                &mut prior,
+            )
+            .unwrap();
+            assert_eq!(valid.get("1"), Some(&1));
+            assert_eq!(
+                prior,
+                BTreeSet::from(["prior".to_string(), "fresh".to_string()])
+            );
+            assert!(
+                parse_state(
+                    b"ID_VOTER,VOTING_METHOD,PRECINCT\nfresh,IN-PERSON,1\n",
+                    &mut prior
+                )
+                .is_err()
+            );
+        }
+    }
+
     #[test]
     fn identity_recovery_requires_one_same_date_in_person_row_per_identifier() {
         let rows = b"ID_VOTER,VOTING_METHOD,PRECINCT\na,IN-PERSON,001\nb,IN-PERSON,2\nb,IN-PERSON,2\nb,IN-PERSON,3\na,MAIL,99\nc,IN-PERSON,\n,IN-PERSON,4\n";

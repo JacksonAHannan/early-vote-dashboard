@@ -16,11 +16,11 @@ async fn tarrant_exact_cutoff_anchor_retains_original_daily_sources() {
         .unwrap();
     let sources = county::collect(&client, &reference, 2026, 8).await.unwrap();
     let daily: Vec<_> = sources.iter().filter(|d| !d.cumulative).collect();
-    assert_eq!(daily.len(), 7);
+    assert_eq!(daily.len(), 8);
     assert!(
         daily
             .iter()
-            .all(|d| d.date < chrono::NaiveDate::from_ymd_opt(2026, 10, 26).unwrap())
+            .all(|d| d.date <= chrono::NaiveDate::from_ymd_opt(2026, 10, 26).unwrap())
     );
     assert!(
         daily
@@ -39,9 +39,12 @@ async fn tarrant_exact_cutoff_anchor_retains_original_daily_sources() {
             .iter()
             .filter(|(p, _)| p.chars().all(|c| c.is_ascii_digit()))
             .count(),
-        473
+        461
     );
     assert!(!anchor.unavailable_precincts.is_empty());
+    assert!(anchor.unavailable_precincts.contains(&"1060".to_string()));
+    assert!(!anchor.counts.contains_key("1060"));
+    assert!(anchor.note.contains("actual cutoff day"));
     let output = PathBuf::from(
         std::env::var("TURNOUT_TARRANT_ANCHOR_OUTPUT")
             .expect("set isolated anonymous aggregate output"),

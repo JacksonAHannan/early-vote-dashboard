@@ -1,0 +1,181 @@
+{
+  "sanpatricio": {
+    "retained_evidence_only": false,
+    "fresh_findings": [
+      {
+        "county": "sanpatricio",
+        "date": "2026-10-26",
+        "source": "https://goelect.txelections.civixapps.com/api-ivis-system/api/v1/getFileByFormat?type=EVR_EARLYVOTING&electionId=53815&electionDate=10/26/2026&county=SANPATRICIO&countyId=205&format=csv",
+        "retrieved_at": "2026-10-27T17:21:37.112827+00:00",
+        "status": "official_empty_body",
+        "response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "next_action": "Fresh official SOS response confirms absent in-person publication for the specified date. Monitor publisher revisions; seek same-scope dated county evidence. Empty/mail-only data is unknown, never zero."
+  },
+  "schleicher": {
+    "retained_evidence_only": false,
+    "fresh_findings": [
+      {
+        "county": "schleicher",
+        "date": "2026-10-26",
+        "source": "https://goelect.txelections.civixapps.com/api-ivis-system/api/v1/getFileByFormat?type=EVR_EARLYVOTING&electionId=53815&electionDate=10/26/2026&county=SCHLEICHER&countyId=207&format=csv",
+        "retrieved_at": "2026-10-27T17:21:37.113996+00:00",
+        "status": "no_in_person_rows",
+        "sha256": "c0fdd1c9733deb295350255a648f80af25bc9cbcf4d9052c89ce6a662372b9c3",
+        "methods": {
+          "MAIL-IN": 6
+        },
+        "duplicate_in_person_rows": 0,
+        "blank_identity_rows": 0,
+        "total": 0
+      }
+    ],
+    "next_action": "Fresh official SOS response confirms absent in-person publication for the specified date. Monitor publisher revisions; seek same-scope dated county evidence. Empty/mail-only data is unknown, never zero."
+  },
+  "sherman": {
+    "retained_evidence_only": false,
+    "fresh_findings": [
+      {
+        "county": "sherman",
+        "date": "2026-10-26",
+        "source": "https://goelect.txelections.civixapps.com/api-ivis-system/api/v1/getFileByFormat?type=EVR_EARLYVOTING&electionId=53815&electionDate=10/26/2026&county=SHERMAN&countyId=211&format=csv",
+        "retrieved_at": "2026-10-27T17:21:37.319351+00:00",
+        "status": "no_in_person_rows",
+        "sha256": "d9747fef4ea7d80f953bfb611a9ac46f8c92910e367cb5131f217ed595d78ffc",
+        "methods": {
+          "MAIL-IN": 7
+        },
+        "duplicate_in_person_rows": 0,
+        "blank_identity_rows": 0,
+        "total": 0
+      }
+    ],
+    "next_action": "Fresh official SOS response confirms absent in-person publication for the specified date. Monitor publisher revisions; seek same-scope dated county evidence. Empty/mail-only data is unknown, never zero."
+  },
+  "starr": {
+    "retained_evidence_only": false,
+    "fresh_findings": [
+      {
+        "county": "starr",
+        "date": "2026-10-23",
+        "source": "https://goelect.txelections.civixapps.com/api-ivis-system/api/v1/getFileByFormat?type=EVR_EARLYVOTING&electionId=53815&electionDate=10/23/2026&county=STARR&countyId=214&format=csv",
+        "retrieved_at": "2026-10-27T17:21:37.499723+00:00",
+        "status": "no_in_person_rows",
+        "sha256": "e21eeaf2c0327b7cc9d9dca53a6a198e078556653dad0e5ef07ce10455ce379f",
+        "methods": {
+          "MAIL-IN": 10
+        },
+        "duplicate_in_person_rows": 0,
+        "blank_identity_rows": 0,
+        "total": 0
+      }
+    ],
+    "next_action": "Fresh official SOS response confirms absent in-person publication for the specified date. Monitor publisher revisions; seek same-scope dated county evidence. Empty/mail-only data is unknown, never zero."
+  },
+  "swisher": {
+    "retained_evidence_only": false,
+    "fresh_findings": [
+      {
+        "county": "swisher",
+        "date": "2026-10-23",
+        "source": "https://goelect.txelections.civixapps.com/api-ivis-system/api/v1/getFileByFormat?type=EVR_EARLYVOTING&electionId=53815&electionDate=10/23/2026&county=SWISHER&countyId=219&format=csv",
+        "retrieved_at": "2026-10-27T17:21:37.534791+00:00",
+        "status": "no_in_person_rows",
+        "sha256": "28eb94c835a56a41562e48e55745383590ab4f41b86908f529c49d360b6e21dd",
+        "methods": {
+          "MAIL-IN": 4
+        },
+        "duplicate_in_person_rows": 0,
+        "blank_identity_rows": 0,
+        "total": 0
+      }
+    ],
+    "next_action": "Fresh official SOS response confirms absent in-person publication for the specified date. Monitor publisher revisions; seek same-scope dated county evidence. Empty/mail-only data is unknown, never zero."
+  },
+  "tarrant": {
+    "retained_evidence_only": false,
+    "candidate_review": {
+      "path": "analysis/county-methodology/s-z/tarrant-identity-anchor-candidate.json",
+      "status": "proved_correctness_fix_pending_parent_integration",
+      "finding": "Including the actual cutoff-day SOS source contradicts20previouslyunique county-label aliases, requiring28publishednativecells (19041oldpublishedvotes) to be quarantined. Individual exact-native-ID targeting restores15cells relative to label-only on the same8-source inputs. The net461nativecells versus stale473is a required accuracy correction; parent owns integration.",
+      "raw_conservation": "373100=206441 native+592 unknown+166020 withheld+47 invalid",
+      "tests": "5passed after3focused baseline failures",
+      "conflict_evidence": "analysis/county-methodology/s-z/tarrant-new-cutoff-conflicts.json"
+    },
+    "next_action": "Use every SOS date through the cutoff and individually exact native targets, preserving all-target ambiguity/cell quarantine and raw-row conservation. Keep cumulative-only/daily-difference-disabled semantics; parent integrates and verifies.",
+    "disposition": "provenfix"
+  },
+  "taylor": {
+    "retained_evidence_only": false,
+    "fresh_findings": [
+      {
+        "source": "https://www.taylorcounty.texas.gov/549/Archived-Election-Results",
+        "local": "analysis/county-methodology/s-z/taylor-archive.html",
+        "sha256": "8ece50e23e1d604c5780340f26bea33015bb759ac0e2a45186f079d07a0d6c96",
+        "finding": "Official archive currently lists March2024party results but omits November2024general native results; no explicit trailing-dot/native crosswalk found. Current2026page publishes real nonempty subprecinct suffixes; a global period-strip would be unsafe."
+      }
+    ],
+    "next_action": "Retain unadmitted status until a published 2024 native-code crosswalk or independent per-native ordinary in-person control establishes the trailing literal dot format. Do not generalize to decimal/suffixed codes."
+  },
+  "upton": {
+    "retained_evidence_only": false,
+    "fresh_findings": [
+      {
+        "source": "https://www.co.upton.tx.us/page/upton.elections",
+        "sha256": "129a4ad3bd8ca1ba6bc1706ebaf78c8c68b982d2dc2ef89b8a14b39c07fc2b45",
+        "finding": "Nov2026officialpage publishes sample ballot labels1-1/1-5/2-2/2-6/3-3/4-4. Currentrostersection says postednightlybutcontainsnoactualNovrosterlinks. No officialdictionarymapsSOS1\u20137 tothesesixnativeIDs; extra7remainsunknown."
+      }
+    ],
+    "next_action": "Obtain a dated county residence roster with the full native codes and exact-ID joins, or explicit official electoral-code crosswalk; do not map by suffix or truncate. Existing staged geometry needs no rebuild."
+  },
+  "webb": {
+    "retained_evidence_only": false,
+    "fresh_findings": [
+      {
+        "county": "webb",
+        "date": "2026-10-26",
+        "source": "https://goelect.txelections.civixapps.com/api-ivis-system/api/v1/getFileByFormat?type=EVR_EARLYVOTING&electionId=53815&electionDate=10/26/2026&county=WEBB&countyId=240&format=csv",
+        "retrieved_at": "2026-10-27T17:21:37.111322+00:00",
+        "status": "official_empty_body",
+        "response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "next_action": "Fresh official SOS response confirms absent in-person publication for the specified date. Monitor publisher revisions; seek same-scope dated county evidence. Empty/mail-only data is unknown, never zero."
+  },
+  "wichita": {
+    "retained_evidence_only": false,
+    "fresh_findings": [
+      {
+        "county": "wichita",
+        "date": "2026-10-26",
+        "source": "https://goelect.txelections.civixapps.com/api-ivis-system/api/v1/getFileByFormat?type=EVR_EARLYVOTING&electionId=53815&electionDate=10/26/2026&county=WICHITA&countyId=243&format=csv",
+        "retrieved_at": "2026-10-27T17:21:37.322622+00:00",
+        "status": "available",
+        "sha256": "02b02d7e5b723f94825f17770c3ca7ed232e9d3731fda4972c479cdd65f72ade",
+        "methods": {
+          "MAIL-IN": 147,
+          "IN-PERSON": 2
+        },
+        "duplicate_in_person_rows": 0,
+        "blank_identity_rows": 0,
+        "total": 2,
+        "reported_native_counts": {
+          "4363": 2
+        }
+      }
+    ],
+    "next_action": "Fresh SOS still has only the retained partial in-person total; seek a dated native county roster with independently reconciled ordinary in-person scope. Keep other dated groups available."
+  },
+  "wood": {
+    "retained_evidence_only": false,
+    "fresh_findings": [
+      {
+        "source": "https://elections.mywoodcounty.com/voter-information/precinct-maps/",
+        "sha256": "a8e555375b576a34629eb9e5a1ce3f7c962ecd60f4763d3fe14af991cde168a5",
+        "finding": "County home explicitly links the canonical elections subdomain. Maps list14votingprecincts 1-1 through4-4, but no explicit2024decimal split\u2192native crosswalk. Results page delegates toClarity; no county webpage evidence closes decimal subdivision ambiguity."
+      }
+    ],
+    "next_action": "Retrieve official Clarity native precinct/split dictionary or county written split-code crosswalk; retain decimal labels verbatim until proven. Historical12daily county controls alone do not prove geographical membership."
+  }
+}
