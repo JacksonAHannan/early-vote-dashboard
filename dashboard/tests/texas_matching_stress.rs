@@ -6,6 +6,7 @@ use texas_turnout::{
 
 fn source(year: i32, day: u32, counts: &[(&str, u64)]) -> Daily {
     Daily {
+        unavailable_precincts: Vec::new(),
         county: "fixture".into(),
         date: texas_turnout::start(year) + chrono::Duration::days(i64::from(day - 1)),
         counts: counts.iter().map(|(id, n)| ((*id).into(), *n)).collect(),

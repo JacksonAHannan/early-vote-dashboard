@@ -430,16 +430,17 @@ fn resolved_matching(
     observed: u32,
     ids: &BTreeSet<String>,
 ) -> Vec<ResolvedDay> {
-    let universe = ids
-        .iter()
-        .cloned()
-        .chain(
-            sources
-                .iter()
-                .filter(|s| s.date.year() == year)
-                .flat_map(|s| s.counts.keys().cloned()),
-        )
-        .collect();
+    // Reference IDs bound zero inference. Source labels cannot expand that scope.
+    // Calendar-only callers without a reference retain the generic source universe.
+    let universe = if ids.is_empty() {
+        sources
+            .iter()
+            .filter(|s| s.date.year() == year)
+            .flat_map(|s| s.counts.keys().cloned())
+            .collect()
+    } else {
+        ids.clone()
+    };
     (1..=CALENDAR_DAYS)
         .map(|day| {
             if year == 2026 && day > observed {
@@ -448,8 +449,12 @@ fn resolved_matching(
             ResolvedDay {
                 daily: crate::matching::counts_with_ids(sources, year, day, false, &universe),
                 cumulative: crate::matching::counts_with_ids(sources, year, day, true, &universe),
-                daily_complete: crate::matching::full(sources, year, day, false),
-                cumulative_complete: crate::matching::full(sources, year, day, true),
+                daily_complete: crate::matching::full_with_ids(
+                    sources, year, day, false, &universe,
+                ),
+                cumulative_complete: crate::matching::full_with_ids(
+                    sources, year, day, true, &universe,
+                ),
             }
         })
         .collect()
@@ -897,6 +902,7 @@ mod tests {
 
     fn daily(county: &str, year: i32, day: u32, counts: &[(&str, u64)], cumulative: bool) -> Daily {
         Daily {
+            unavailable_precincts: Vec::new(),
             county: county.into(),
             date: start(year) + chrono::Duration::days(i64::from(day - 1)),
             counts: counts.iter().map(|(id, n)| ((*id).into(), *n)).collect(),
@@ -907,6 +913,22 @@ mod tests {
             cumulative,
             complete: false,
         }
+    }
+
+    #[test]
+    fn unmapped_positive_labels_do_not_expand_the_reference_certification_universe() {
+        let ids = BTreeSet::from(["1".into(), "2".into()]);
+        let mut first = daily("x", 2026, 1, &[("1", 10), ("99999", 1)], false);
+        first.complete = true;
+        let mut second = daily("x", 2026, 2, &[("1", 5)], false);
+        second.complete = true;
+        let resolved = resolved_matching(&[first, second], 2026, 2, &ids);
+        assert_eq!(resolved[0].daily.as_ref().unwrap()["99999"], 1);
+        assert!(!resolved[0].daily.as_ref().unwrap().contains_key("2"));
+        assert!(!resolved[0].daily_complete);
+        assert!(!resolved[1].cumulative.as_ref().unwrap().contains_key("2"));
+        assert!(!resolved[1].cumulative_complete);
+        assert_eq!(resolved[1].daily.as_ref().unwrap()["2"], 0);
     }
 
     fn group(old: &[&str], new: &[&str], bucket: Option<usize>, unchanged: bool) -> GroupResult {

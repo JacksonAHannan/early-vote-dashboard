@@ -30,6 +30,11 @@ def start(year):
     return date(year, 10, 21 if year == 2024 else 19)
 
 
+def precinct_id(value):
+    label = value.strip().lstrip('\ufeff').upper()
+    return label.lstrip('0') or ('0' if label else 'UNASSIGNED')
+
+
 def resolve(sources, year, ids):
     """Compare explicit source presence, complete-roster zeros and arithmetic.
 
@@ -48,8 +53,14 @@ def resolve(sources, year, ids):
         source = latest.get(((start(year) + timedelta(days=day)).isoformat(), cumulative))
         if source is None:
             return None
+        assert all(type(value) is int and value >= 0 for value in source['counts'].values())
+        unavailable = {precinct_id(p) for p in source.get('unavailable_precincts', [])}
+        # A reconciled county total cannot locate voters with unproven labels.
+        # Keep the actual reference universe fixed when inferring native zeros.
+        certified = (source['complete'] and not unavailable
+                     and not any(value > 0 and p not in ids for p, value in source['counts'].items()))
         return {p: source['counts'].get(p, 0) for p in ids
-                if p in source['counts'] or source['complete']}
+                if precinct_id(p) not in unavailable and (p in source['counts'] or certified)}
     cumulative = []
     daily = []
     for day in range(12):
@@ -67,6 +78,25 @@ def resolve(sources, year, ids):
         cumulative.append(total)
         daily.append(ev)
     return daily, cumulative
+
+
+def check_resolver_contract():
+    ids = {'1', '2'}
+    def observation(day, counts, *, cumulative=False, unavailable=()):
+        return {'date': f'2026-10-{18 + day}', 'counts': counts, 'complete': True,
+                'retrieved_at': '', 'cumulative': cumulative, 'unavailable_precincts': list(unavailable)}
+    first = observation(1, {'1': 10, '99999': 1})
+    second = observation(2, {'1': 5})
+    daily, cumulative = resolve([first, second], 2026, ids)
+    assert daily[0] == {'1': 10} and cumulative[1] == {'1': 15}
+    assert daily[1] == {'1': 5, '2': 0}
+    daily, cumulative = resolve([observation(1, {'1': 10}), observation(2, {'1': 15, '99999': 1}, cumulative=True)], 2026, ids)
+    assert cumulative[1] == {'1': 15} and daily[1] == {'1': 5}
+    daily, cumulative = resolve([observation(1, {'1': 9, '2': 10}, unavailable=['001'])], 2026, ids)
+    assert daily[0] == cumulative[0] == {'2': 10}
+    daily, cumulative = resolve([observation(1, {'1': 10, '99999': 0})], 2026, ids)
+    assert daily[0] == cumulative[0] == {'1': 10, '2': 0}
+    return 5
 
 
 def fit(points):
@@ -117,9 +147,12 @@ def metric_value(classification, metric, county, members):
 
 
 def run():
+    oracle_contract_checks = check_resolver_contract()
     snapshot = get('/api/data')
     references = {value['id']: value for value in get('/api/reference')}
     counts = Counter()
+    counts['oracle_contract_checks'] = oracle_contract_checks
+    assert {county['id'] for county in snapshot['counties']} == set(references)
     errors = []
     seen_partial = []
     for county in snapshot['counties']:
@@ -245,6 +278,7 @@ def run():
     assert get('/api/data')['generated_at'] == snapshot['generated_at']
     report = {'status': 'failed' if errors else 'passed', 'base_url': BASE,
               'snapshot_generated_at': snapshot['generated_at'], 'through': snapshot['through'],
+              'precinct_counties': len(snapshot['counties']),
               'checks': dict(counts), 'unknown_presidential_available_group_dates': len(set(seen_partial)),
               'errors': errors}
     OUT.mkdir(parents=True, exist_ok=True)

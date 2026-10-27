@@ -1,6 +1,6 @@
 # Texas early vote
 
-Rust scraper, analysis, scheduler and HTTP server. The Counties workspace compares official turnout by partisan and demographic county buckets across all 254 Texas counties. The Precincts workspace retains maps and Census data for 215 counties; turnout comparisons match the available precinct geography at each cutoff. It has Trends for daily buckets and cross-county comparisons and Explore for linked maps, regressions and precinct detail.
+Rust scraper, analysis, scheduler and HTTP server. The Counties workspace compares official turnout by partisan and demographic county buckets across all 254 Texas counties. The Precincts workspace retains maps and Census data for 248 counties; turnout comparisons match the available precinct geography at each cutoff. It has Trends for daily buckets and cross-county comparisons and Explore for linked maps, regressions and precinct detail.
 
 ```bash
 ./dashboard/run.sh
@@ -338,3 +338,16 @@ TURNOUT_TEST_URL=http://127.0.0.1:8743 uv run --with playwright --with pillow py
 ```
 
 The check reproduces narrow Texas and other-state regressions, a phone regression, a wide timeline and the full matrix. It verifies plot occupancy, bounded social aspect ratios, opaque PNGs, complete capture containment and unchanged on-screen SVG geometry.
+
+
+### October 26 county recovery
+
+Precinct references now cover 248 Texas counties. The October 25 retained edition has matched cumulative observations for 226 counties (previously 192); support on an earlier day does not imply availability on the latest day. Thirty-three additions use native TLC precinct IDs with proved historical/current label matches, including partial counties. Their Census and place profiles and maps are retained alongside the references. No minimum county-wide coverage threshold excludes otherwise usable matched groups. The six remaining unproved native-ID joins and dated source gaps are documented in [the gap inventory](../sources/county-recovery/gap-inventory.md).
+
+Dallas and Montgomery quarantine ambiguous identity records only in the affected date/residence-precinct cell. The aggregate `Daily.unavailable_precincts` field prevents that cell from being counted or certified as an inferred zero; other cells and dates remain usable. Quarantine preserves unaffected dates. The three new county-native adapters also retain successful dates when another dated download or parse fails. Independent Dallas date/location controls accept WordPress numeric filename revisions. New Waller, Washington and San Patricio 2026 county-native adapters use official advertised daily PDF/XLSX reports through `scripts/collect_county_native.py`; `pdftotext` is required for the PDFs. These reports do not self-certify county completeness. Source label aliases require unambiguous exact-identity evidence from another official same-date roster, processed only in memory.
+
+Zero inference requires an independently qualified complete report without quarantined cells or positive precinct labels outside the native reference universe. Explicit mapped counts survive unknown source labels. Native county source scope remains in-person and matched to in-person history; full-county mail stays in its separate method-aware county comparison. New counties without reviewed primary-participation inputs show that classification as unavailable rather than fabricated. Collection and source qualification are described in [the recovery report](../sources/county-recovery/county-sources.md) and [refresh audit](../sources/county-recovery/refresh-audit.md).
+
+The admission diagnostic at `sources/precinct-expansion/discovery/audit_precinct_ids.py` uses the native builder's leading-zero normalization and joins official county FIPS to TLC `CNTY`; conflicting normalized IDs/FIPS fail explicitly. Its outputs are diagnostics, not a license to allocate votes across changing boundaries. The reproducible isolated admission scripts live in `sources/county-recovery/`.
+
+Focused checks: `python3 -m unittest discover -s dashboard/tests -p 'test_county_*.py'`, `python3 -m unittest discover -s dashboard/tests -p test_precinct_id_audit.py`, and `cargo test --manifest-path dashboard/Cargo.toml --locked`. The opt-in `county_recovery` integration test exercises live official downloads without persisting voter rosters. `county_recovery_browser.py` verifies recovered/new county scopes, linked geometry/Census/place profiles, actual image exports and responsive layouts on either native or Pages deployments. The retained anonymous state is seeded with all 248 references; Before publication, the disposable turnout aggregate cache is invalidated so the existing workflow restores the validated 248-county retained release. The previous retained archive remains backed up; the hourly workflow and its cache prefix are unchanged.

@@ -51,6 +51,9 @@ pub struct Party {
 }
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct Daily {
+    /// Explicitly unknown cells override counts and prohibit absent-row zero inference.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unavailable_precincts: Vec<String>,
     #[serde(default)]
     pub complete: bool,
     pub county: String,
@@ -474,9 +477,35 @@ mod tests {
         assert!(analyze(&r, &Counts::new(), &Counts::new(), 1).is_err());
     }
     #[test]
+    fn daily_unavailability_preserves_legacy_json_and_round_trips_unknown_cells() {
+        let legacy = serde_json::json!({
+            "county":"x", "date":"2026-10-19", "counts":{"1":10},
+            "source":"official", "sha256":"a", "retrieved_at":"", "note":"", "cumulative":false
+        });
+        let mut daily: Daily = serde_json::from_value(legacy).unwrap();
+        assert!(daily.unavailable_precincts.is_empty());
+        assert!(
+            serde_json::to_value(&daily)
+                .unwrap()
+                .get("unavailable_precincts")
+                .is_none()
+        );
+        daily.unavailable_precincts = vec!["2".into()];
+        let encoded = serde_json::to_value(&daily).unwrap();
+        assert_eq!(encoded["unavailable_precincts"], serde_json::json!(["2"]));
+        assert_eq!(
+            serde_json::from_value::<Daily>(encoded)
+                .unwrap()
+                .unavailable_precincts,
+            vec!["2"]
+        );
+    }
+
+    #[test]
     fn missing_or_duplicate_days_are_not_partial_sums() {
         assert!(sum_days(&[], 2024, 4).is_err());
         let d = Daily {
+            unavailable_precincts: Vec::new(),
             complete: false,
             county: "x".into(),
             date: start(2024),
@@ -526,6 +555,7 @@ mod recovery_tests {
     fn newer_cumulative_workbook_keeps_exact_requested_cutoff_without_allocation() {
         let through = start(2026) + chrono::Duration::days(3);
         let old = Daily {
+            unavailable_precincts: Vec::new(),
             complete: false,
             county: "ellis".into(),
             date: through,
@@ -559,6 +589,7 @@ mod recovery_tests {
     #[test]
     fn cumulative_snapshot_cannot_reconstruct_an_earlier_day() {
         let d = Daily {
+            unavailable_precincts: Vec::new(),
             complete: false,
             county: "x".into(),
             date: start(2026) + chrono::Duration::days(3),

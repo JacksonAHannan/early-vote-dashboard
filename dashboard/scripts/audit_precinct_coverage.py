@@ -17,12 +17,12 @@ def reconstruct(sources,year,day,universe):
  """Return count map plus fully corroborated entire-roster status, or missing."""
  cumulative=exact(sources,year,day,True)
  if cumulative:
-  counts=dict(cumulative['counts']);complete=cumulative.get('complete',False)
+  counts={p:n for p,n in cumulative['counts'].items() if p not in cumulative.get('unavailable_precincts',[])};complete=cumulative.get('complete',False) and not cumulative.get('unavailable_precincts') and all(n==0 or p in universe for p,n in counts.items())
   if complete:counts.update({id:0 for id in universe if id not in counts})
   return counts,complete
  daily=exact(sources,year,day,False)
  if not daily:return {},False
- now=dict(daily['counts']);complete=daily.get('complete',False)
+ now={p:n for p,n in daily['counts'].items() if p not in daily.get('unavailable_precincts',[])};complete=daily.get('complete',False) and not daily.get('unavailable_precincts') and all(n==0 or p in universe for p,n in now.items())
  if complete:now.update({id:0 for id in universe if id not in now})
  if day==1:return now,complete
  before,prior_complete=reconstruct(sources,year,day-1,universe)

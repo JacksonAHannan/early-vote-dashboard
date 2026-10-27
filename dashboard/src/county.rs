@@ -5,7 +5,7 @@ use calamine::{Data, Reader, open_workbook_auto_from_rs};
 use chrono::Datelike;
 use sha2::{Digest, Sha256};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     io::{Cursor, Read},
 };
 
@@ -122,6 +122,7 @@ fn days_from(
             .remove(&day)
             .with_context(|| format!("county ordinary roster missing {day}"))?;
         output.push(Daily {
+            unavailable_precincts: Vec::new(),
             complete: false,
             county: reference.id.clone(),
             date: day,
@@ -135,6 +136,231 @@ fn days_from(
     }
     Ok(output)
 }
+
+#[derive(Default)]
+struct CountyRoster {
+    voters: Voters,
+    blank_identifiers: BTreeMap<NaiveDate, BTreeMap<String, u64>>,
+}
+impl CountyRoster {
+    fn record(&mut self, id: &str, day: NaiveDate, precinct: &str, repeat: bool) -> Result<()> {
+        if id.trim().is_empty() {
+            let precinct = normalize(precinct);
+            let precinct = if precinct.is_empty() {
+                "UNASSIGNED".into()
+            } else {
+                precinct
+            };
+            *self
+                .blank_identifiers
+                .entry(day)
+                .or_default()
+                .entry(precinct)
+                .or_default() += 1;
+            return Ok(());
+        }
+        insert(&mut self.voters, id, day, precinct, repeat)
+    }
+
+    fn days(
+        self,
+        reference: &Reference,
+        year: i32,
+        n: u32,
+        source: &str,
+        sha: &str,
+        note: &str,
+    ) -> Result<Vec<Daily>> {
+        if self.blank_identifiers.is_empty() {
+            return days_from(self.voters, reference, year, n, source, sha, note);
+        }
+        let mut counts_by_day: BTreeMap<NaiveDate, Counts> = BTreeMap::new();
+        for (day, precinct) in self.voters.values() {
+            *counts_by_day
+                .entry(*day)
+                .or_default()
+                .entry(precinct.clone())
+                .or_default() += 1;
+        }
+        let mut output = Vec::new();
+        for offset in 0..n {
+            let day = start(year) + chrono::Duration::days(i64::from(offset));
+            let bad_cells = self.blank_identifiers.get(&day);
+            let mut counts = match counts_by_day.remove(&day) {
+                Some(counts) => counts,
+                None if bad_cells.is_some() => Counts::new(),
+                None => bail!("county ordinary roster missing {day}"),
+            };
+            let mut scope = note.to_string();
+            if let Some(cells) = bad_cells {
+                // No invented identities or partial totals for an affected cell.
+                // Identified rows remain in the identity map until aggregation,
+                // preserving the existing conflict and cross-day repeat checks.
+                for precinct in cells.keys() {
+                    counts.remove(precinct);
+                }
+                scope.push_str(&format!(
+                    " Blank-identifier quarantine: {} rows with blank identifiers in {} date/precinct cells on {day}; all counts for those cells withheld as unavailable, not zero.",
+                    cells.values().sum::<u64>(), cells.len()
+                ));
+            }
+            // An absent day cannot be recertified as a complete zero observation.
+            if counts.is_empty() {
+                continue;
+            }
+            output.push(Daily {
+                unavailable_precincts: bad_cells
+                    .map(|cells| cells.keys().cloned().collect())
+                    .unwrap_or_default(),
+                complete: false,
+                county: reference.id.clone(),
+                date: day,
+                counts,
+                source: source.into(),
+                sha256: sha.into(),
+                retrieved_at: Utc::now().to_rfc3339(),
+                note: scope,
+                cumulative: false,
+            });
+        }
+        ensure!(
+            !output.is_empty(),
+            "county ordinary roster has no usable dates after blank-identifier quarantine"
+        );
+        Ok(output)
+    }
+}
+
+fn montgomery_rows(bytes: &[u8], day: NaiveDate, roster: &mut CountyRoster) -> Result<()> {
+    let mut csv = csv::ReaderBuilder::new()
+        .trim(csv::Trim::All)
+        .from_reader(bytes);
+    let h = csv.headers()?.clone();
+    let idx = |name: &str| {
+        h.iter()
+            .position(|x| x.trim_start_matches('\u{feff}') == name)
+            .with_context(|| format!("missing Montgomery field {name}"))
+    };
+    let method = idx("VoteType")?;
+    let d = idx("DateVoted")?;
+    let p = idx("CountyElectionPrecinct")?;
+    let id = idx("VUID")?;
+    for record in csv.records() {
+        let row = record?;
+        if &row[method] != "E" {
+            continue;
+        }
+        ensure!(date(&row[d])? == day, "Montgomery daily date mismatch");
+        roster.record(&row[id], day, &row[p], true)?;
+    }
+    Ok(())
+}
+
+fn dallas_rows(rows: &[Vec<String>], year: i32, n: u32) -> Result<CountyRoster> {
+    let (first, headers) = header(rows, &["DATE VOTED", "PRECINCT"])?;
+    let mut roster = CountyRoster::default();
+    for row in rows.iter().skip(first + 1) {
+        let raw = field(row, &headers, "DATE VOTED");
+        if raw.is_empty() {
+            continue;
+        }
+        let day = date(raw)?;
+        if day < start(year) || day >= start(year) + chrono::Duration::days(i64::from(n)) {
+            continue;
+        }
+        let id = field(row, &headers, "SOS VOTERID");
+        let id = if id.is_empty() {
+            field(row, &headers, "IDNUMBER")
+        } else {
+            id
+        };
+        roster.record(id, day, field(row, &headers, "PRECINCT"), false)?;
+    }
+    Ok(roster)
+}
+
+fn native_series(raw: &[u8], county: &str, through: NaiveDate) -> Result<Vec<Daily>> {
+    let values: Vec<Daily> =
+        serde_json::from_slice(raw).context("invalid native county aggregate JSON")?;
+    let mut dates = BTreeSet::new();
+    let mut output = Vec::new();
+    for mut day in values {
+        ensure!(
+            day.county == county,
+            "native county aggregate identity mismatch"
+        );
+        ensure!(
+            day.date.year() == 2026
+                && day.date >= start(2026)
+                && day.date <= through
+                && !day.cumulative,
+            "native county aggregate date/scope mismatch"
+        );
+        ensure!(
+            dates.insert(day.date),
+            "duplicate native county aggregate date"
+        );
+        ensure!(
+            !day.source.trim().is_empty()
+                && day.sha256.len() == 64
+                && day.sha256.bytes().all(|b| b.is_ascii_hexdigit()),
+            "native county aggregate provenance missing or invalid"
+        );
+        day.complete = false;
+        day.unavailable_precincts = day
+            .unavailable_precincts
+            .into_iter()
+            .map(|p| {
+                let p = normalize(&p);
+                if p.is_empty() { "UNASSIGNED".into() } else { p }
+            })
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        day.counts
+            .retain(|p, _| !day.unavailable_precincts.contains(&normalize(p)));
+        if day.counts.is_empty() && !day.unavailable_precincts.is_empty() {
+            continue; // Entirely unavailable dates cannot be certified as zeros.
+        }
+        ensure!(
+            day.counts.values().any(|count| *count > 0),
+            "empty native county roster is not confirmed zero"
+        );
+        output.push(day);
+    }
+    ensure!(
+        !output.is_empty(),
+        "native county collector returned no usable dated reports"
+    );
+    output.sort_by_key(|d| d.date);
+    Ok(output)
+}
+
+async fn native_county(county: &str, n: u32) -> Result<Vec<Daily>> {
+    ensure!(
+        (1..=12).contains(&n),
+        "invalid native county calendar cutoff"
+    );
+    let through = start(2026) + chrono::Duration::days(i64::from(n - 1));
+    let child = tokio::process::Command::new("python3")
+        .arg(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("scripts/collect_county_native.py"),
+        )
+        .args(["--county", county, "--through", &through.to_string()])
+        .kill_on_drop(true)
+        .output();
+    let output = tokio::time::timeout(std::time::Duration::from_secs(360), child)
+        .await
+        .context("native county collection timed out")??;
+    ensure!(
+        output.status.success(),
+        "native county collector failed: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
+    native_series(&output.stdout, county, through)
+}
+
 pub async fn collect(
     client: &reqwest::Client,
     r: &Reference,
@@ -152,6 +378,7 @@ pub async fn collect(
         "montgomery" => montgomery(client, r, year, n).await,
         "hays" if year == 2026 => hays(client, r, n).await,
         "ellis" if year == 2026 => ellis(client, r, n).await,
+        "waller" | "washington" | "sanpatricio" if year == 2026 => native_county(&r.id, n).await,
         _ => bail!("no county adapter"),
     }
 }
@@ -160,7 +387,16 @@ pub fn has_adapter(id: &str, year: i32) -> bool {
         return true;
     }
     ["travis", "dallas", "montgomery", "harris"].contains(&id)
-        || (year == 2026 && ["hays", "ellis", "nueces"].contains(&id))
+        || (year == 2026
+            && [
+                "hays",
+                "ellis",
+                "nueces",
+                "waller",
+                "washington",
+                "sanpatricio",
+            ]
+            .contains(&id))
 }
 fn travis_roster_link(html: &str, page: &str, year: i32) -> Result<String> {
     let prefix = format!("g{}-voter-rosters", year % 100);
@@ -251,7 +487,7 @@ async fn montgomery(
     year: i32,
     n: u32,
 ) -> Result<Vec<Daily>> {
-    let mut voters = Voters::new();
+    let mut roster = CountyRoster::default();
     let mut evidence = Vec::new();
     for i in 0..n {
         let day = start(year) + chrono::Duration::days(i64::from(i));
@@ -271,41 +507,24 @@ async fn montgomery(
             .iter()
             .find(|(name, _)| name.to_lowercase().ends_with(".csv"))
             .context("no Montgomery CSV")?;
-        let mut csv = csv::ReaderBuilder::new()
-            .trim(csv::Trim::All)
-            .from_reader(bytes.as_slice());
-        let h = csv.headers()?.clone();
-        let idx = |name: &str| {
-            h.iter()
-                .position(|x| x.trim_start_matches('\u{feff}') == name)
-                .with_context(|| format!("missing Montgomery field {name}"))
-        };
-        let method = idx("VoteType")?;
-        let d = idx("DateVoted")?;
-        let p = idx("CountyElectionPrecinct")?;
-        let id = idx("VUID")?;
-        for record in csv.records() {
-            let row = record?;
-            if &row[method] != "E" {
-                continue;
-            }
-            ensure!(date(&row[d])? == day, "Montgomery daily date mismatch");
-            insert(&mut voters, &row[id], day, &row[p], true)?;
-        }
+        montgomery_rows(bytes, day, &mut roster)?;
         evidence.push((day, url, hash));
     }
-    let mut days = days_from(
-        voters,
+    let mut days = roster.days(
         r,
         year,
         n,
         "",
         "",
-        "County ordinary E only; limited and mail excluded. Deduplicated VUID across jurisdictions and dates, assigning earliest appearance. Four-day 2024 unique roster 70,905; graph 70,903 (two-voter discrepancy).",
+        "County ordinary E only; limited and mail excluded. Deduplicated VUID across jurisdictions and dates, assigning earliest appearance. Independent county controls determine completeness; unsupported cells remain unavailable.",
     )?;
-    for (daily, (_, url, hash)) in days.iter_mut().zip(evidence) {
-        daily.source = url;
-        daily.sha256 = hash;
+    for daily in &mut days {
+        let (_, url, hash) = evidence
+            .iter()
+            .find(|(day, _, _)| *day == daily.date)
+            .unwrap();
+        daily.source = url.clone();
+        daily.sha256 = hash.clone();
     }
     Ok(days)
 }
@@ -345,39 +564,13 @@ async fn dallas(client: &reqwest::Client, r: &Reference, year: i32, n: u32) -> R
     let raw = download(client, &url, None).await?;
     let hash = format!("{:x}", Sha256::digest(&raw));
     let rows = workbook(raw)?;
-    let (first, headers) = header(&rows, &["DATE VOTED", "PRECINCT"])?;
-    let mut voters = Voters::new();
-    for row in rows.iter().skip(first + 1) {
-        let raw = field(row, &headers, "DATE VOTED");
-        if raw.is_empty() {
-            continue;
-        }
-        let day = date(raw)?;
-        if day < start(year) || day >= start(year) + chrono::Duration::days(i64::from(n)) {
-            continue;
-        }
-        let id = field(row, &headers, "SOS VOTERID");
-        let id = if id.is_empty() {
-            field(row, &headers, "IDNUMBER")
-        } else {
-            id
-        };
-        insert(
-            &mut voters,
-            id,
-            day,
-            field(row, &headers, "PRECINCT"),
-            false,
-        )?;
-    }
-    days_from(
-        voters,
+    dallas_rows(&rows, year, n)?.days(
         r,
         year,
         n,
         &url,
         &hash,
-        "County cumulative in-person workbook, filtered by DATE VOTED and residence PRECINCT. Unique voter IDs; blanks remain unassigned. 2026 four-day roster is 64 above county location totals; historical days reconcile exactly.",
+        "County cumulative in-person workbook, filtered by DATE VOTED and residence PRECINCT. Unique voter IDs; blanks remain unassigned. Source totals are checked against independently dated county controls; unsupported cells remain unavailable.",
     )
 }
 async fn hays(client: &reqwest::Client, r: &Reference, n: u32) -> Result<Vec<Daily>> {
@@ -503,6 +696,7 @@ async fn ellis_native(client: &reqwest::Client, r: &Reference) -> Result<Vec<Dai
     }
     ensure!(!counts.is_empty(), "Ellis workbook has no ordinary voters");
     Ok(vec![Daily {
+        unavailable_precincts: Vec::new(),
         complete: false,
         county: r.id.clone(),
         date: through,
@@ -520,6 +714,184 @@ async fn ellis_native(client: &reqwest::Client, r: &Reference) -> Result<Vec<Dai
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn native_report() -> serde_json::Value {
+        serde_json::json!({
+            "county":"waller", "date":"2026-10-19", "counts":{"1":9,"2":10},
+            "source":"https://official.example/roster.pdf", "sha256":"a".repeat(64),
+            "retrieved_at":"2026-10-26T00:00:00Z", "note":"County roster", "complete":true,
+            "cumulative":false, "unavailable_precincts":["001"]
+        })
+    }
+
+    #[test]
+    fn native_bridge_keeps_partial_dates_and_honors_unknown_cells() {
+        let first = native_report();
+        let mut third = first.clone();
+        third["date"] = "2026-10-21".into();
+        third["unavailable_precincts"] = serde_json::json!([]);
+        let raw = serde_json::to_vec(&vec![third, first]).unwrap();
+        let days = native_series(&raw, "waller", start(2026) + chrono::Duration::days(2)).unwrap();
+        assert_eq!(days.len(), 2);
+        assert_eq!(days[0].date, start(2026));
+        assert_eq!(days[0].counts, Counts::from([("2".into(), 10)]));
+        assert_eq!(days[0].unavailable_precincts, vec!["1"]);
+        assert!(days.iter().all(|d| !d.complete));
+        assert!(days[1].counts.contains_key("1"));
+        for county in ["waller", "washington", "sanpatricio"] {
+            assert!(has_adapter(county, 2026));
+            assert!(!has_adapter(county, 2024));
+        }
+    }
+
+    #[test]
+    fn native_bridge_rejects_foreign_scope_invalid_schema_and_missing_provenance() {
+        let cutoff = start(2026) + chrono::Duration::days(6);
+        for (field, value) in [
+            ("county", serde_json::json!("washington")),
+            ("date", serde_json::json!("2024-10-21")),
+            ("date", serde_json::json!("2026-10-18")),
+            ("date", serde_json::json!("2026-10-26")),
+            ("cumulative", serde_json::json!(true)),
+            ("source", serde_json::json!(" ")),
+            ("sha256", serde_json::json!("bad")),
+            ("sha256", serde_json::json!("z".repeat(64))),
+            ("counts", serde_json::json!({"1":-1})),
+        ] {
+            let mut report = native_report();
+            report[field] = value;
+            let raw = serde_json::to_vec(&vec![report]).unwrap();
+            assert!(
+                native_series(&raw, "waller", cutoff).is_err(),
+                "accepted invalid {field}"
+            );
+        }
+        for raw in [b"invalid JSON".as_slice(), b"{}", b"[]"] {
+            assert!(native_series(raw, "waller", cutoff).is_err());
+        }
+        let duplicated = serde_json::to_vec(&vec![native_report(), native_report()]).unwrap();
+        assert!(native_series(&duplicated, "waller", cutoff).is_err());
+    }
+
+    #[test]
+    fn native_bridge_does_not_publish_empty_or_fully_quarantined_dates_as_zero() {
+        let mut empty = native_report();
+        empty["counts"] = serde_json::json!({});
+        let raw = serde_json::to_vec(&vec![empty.clone()]).unwrap();
+        assert!(native_series(&raw, "waller", start(2026)).is_err());
+        let mut valid = native_report();
+        valid["date"] = "2026-10-20".into();
+        let raw = serde_json::to_vec(&vec![empty.clone(), valid]).unwrap();
+        let days = native_series(&raw, "waller", start(2026) + chrono::Duration::days(1)).unwrap();
+        assert_eq!(days.len(), 1);
+        assert_eq!(days[0].date, start(2026) + chrono::Duration::days(1));
+        empty["unavailable_precincts"] = serde_json::json!([]);
+        let raw = serde_json::to_vec(&vec![empty]).unwrap();
+        assert!(native_series(&raw, "waller", start(2026)).is_err());
+    }
+
+    fn roster_reference() -> Reference {
+        serde_json::from_value(serde_json::json!({
+            "id":"test", "name":"Test", "state_id":1, "groups":[],
+            "exact_pairs":[], "presidential":{}, "references":{}
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn montgomery_blank_ids_quarantine_only_the_affected_date_and_precinct() {
+        let mut roster = CountyRoster::default();
+        montgomery_rows(
+            b"VoteType,DateVoted,CountyElectionPrecinct,VUID\nE,10/19/2026,001,a\nE,10/19/2026,002,b\nE,10/19/2026,002,b\nE,10/19/2026,1,\nE,10/19/2026,001,\nL,10/19/2026,002,\n",
+            start(2026),
+            &mut roster,
+        )
+        .unwrap();
+        montgomery_rows(
+            b"VoteType,DateVoted,CountyElectionPrecinct,VUID\nE,10/20/2026,002,b\nE,10/20/2026,001,c\n",
+            start(2026) + chrono::Duration::days(1),
+            &mut roster,
+        )
+        .unwrap();
+        let days = roster
+            .days(&roster_reference(), 2026, 2, "official", "hash", "Scope.")
+            .unwrap();
+        assert_eq!(days.len(), 2);
+        assert_eq!(days[0].counts, Counts::from([("2".into(), 1)]));
+        assert!(!days[0].counts.contains_key("1"));
+        assert_eq!(days[0].unavailable_precincts, vec!["1"]);
+        assert!(days[0].note.contains("2 rows with blank identifiers"));
+        assert!(days[0].note.contains("1 date/precinct cells"));
+        assert_eq!(days[1].counts, Counts::from([("1".into(), 1)]));
+        assert!(!days[0].complete && !days[1].complete);
+    }
+
+    #[test]
+    fn dallas_blank_ids_quarantine_full_cell_and_keep_other_dates() {
+        let rows: Vec<Vec<String>> = [
+            ["DATE VOTED", "PRECINCT", "SOS VOTERID", "IDNUMBER"],
+            ["10/19/2026", "001", "a", ""],
+            ["10/19/2026", "1", "", ""],
+            ["10/19/2026", "002", "", "b"],
+            ["10/19/2026", "002", "", "b"],
+            ["10/20/2026", "001", "c", ""],
+            ["10/21/2026", "002", "", ""],
+        ]
+        .into_iter()
+        .map(|row| row.into_iter().map(String::from).collect())
+        .collect();
+        let days = dallas_rows(&rows, 2026, 2)
+            .unwrap()
+            .days(&roster_reference(), 2026, 2, "official", "hash", "Scope.")
+            .unwrap();
+        assert_eq!(days[0].counts, Counts::from([("2".into(), 1)]));
+        assert!(!days[0].counts.contains_key("1"));
+        assert_eq!(days[0].unavailable_precincts, vec!["1"]);
+        assert!(days[0].note.contains("1 rows with blank identifiers"));
+        assert_eq!(days[1].counts, Counts::from([("1".into(), 1)]));
+        assert!(!days[1].note.contains("blank identifiers"));
+    }
+
+    #[test]
+    fn blank_only_dates_are_unavailable_and_never_reported_as_zero() {
+        let mut roster = CountyRoster::default();
+        roster.record("a", start(2026), "001", true).unwrap();
+        roster.record("", start(2026), "001", true).unwrap();
+        roster
+            .record("b", start(2026) + chrono::Duration::days(1), "002", true)
+            .unwrap();
+        let days = roster
+            .days(&roster_reference(), 2026, 2, "official", "hash", "Scope.")
+            .unwrap();
+        assert_eq!(days.len(), 1);
+        assert_eq!(days[0].date, start(2026) + chrono::Duration::days(1));
+        assert!(!days[0].counts.is_empty());
+        let mut only_blank = CountyRoster::default();
+        only_blank.record("", start(2026), "001", false).unwrap();
+        assert!(
+            only_blank
+                .days(&roster_reference(), 2026, 1, "official", "hash", "Scope.")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn quarantining_blank_ids_does_not_relax_real_identity_conflicts() {
+        let mut roster = CountyRoster::default();
+        roster.record("a", start(2026), "001", true).unwrap();
+        roster.record("", start(2026), "001", true).unwrap();
+        assert!(roster.record("a", start(2026), "002", true).is_err());
+        let mut strict = Voters::new();
+        assert!(insert(&mut strict, "", start(2026), "001", true).is_err());
+        let mut dallas = CountyRoster::default();
+        dallas.record("a", start(2026), "001", false).unwrap();
+        assert!(
+            dallas
+                .record("a", start(2026) + chrono::Duration::days(1), "001", false)
+                .is_err()
+        );
+    }
+
     #[test]
     fn cross_day_dedup_keeps_earliest_and_rejects_conflicting_precinct() {
         let mut v = Voters::new();
@@ -664,7 +1036,7 @@ async fn harris(client: &reqwest::Client, r: &Reference, year: i32, n: u32) -> R
     let bytes = download(client, source, None).await?;
     let hash = format!("{:x}", Sha256::digest(&bytes));
     let stamp = chrono::Utc::now().to_rfc3339();
-    Ok(harris_counts(&bytes, year, n)?.into_iter().map(|(date, counts)| Daily { complete: false,
+    Ok(harris_counts(&bytes, year, n)?.into_iter().map(|(date, counts)| Daily { unavailable_precincts: Vec::new(), complete: false,
         county: r.id.clone(), date, counts, source: source.into(), sha256: hash.clone(), retrieved_at: stamp.clone(), cumulative: false,
         note: "Official Harris County dedicated in-person early-voting ZIP; CSV ActivityDate fixes the date. StateVoterID and county IDNumber are unique within/across archive members. Mail/election-day sources excluded. Native county reports used consistently for both cycles; they differ from SOS aggregates, including the incomplete October 23, 2026 SOS roster. No voter records retained or missing votes allocated.".into(),
     }).collect())
@@ -847,7 +1219,7 @@ async fn nueces(client: &reqwest::Client, r: &Reference, n: u32) -> Result<Vec<D
     ensure!(output.status.success(), "Nueces PDF text extraction failed");
     let text = String::from_utf8(output.stdout).context("Nueces extracted text is not UTF-8")?;
     let stamp = chrono::Utc::now().to_rfc3339();
-    Ok(nueces_counts(&text,n)?.into_iter().map(|(date,counts)| Daily { complete: false, county:r.id.clone(),date,counts,source:source.clone(),sha256:hash.clone(),retrieved_at:stamp.clone(),cumulative:false,note:"Official Nueces County dedicated in-person daily roster PDF, discovered from the current county page. Every parsed row is Early Voted with a native date and unique VUID; raw PDF/text remain only in anonymous pipes/memory. All dates use the county source consistently; native precinct labels absent from the 26P proxy remain unassigned. No votes are allocated to close SOS or map discrepancies.".into() }).collect())
+    Ok(nueces_counts(&text,n)?.into_iter().map(|(date,counts)| Daily { unavailable_precincts: Vec::new(), complete: false, county:r.id.clone(),date,counts,source:source.clone(),sha256:hash.clone(),retrieved_at:stamp.clone(),cumulative:false,note:"Official Nueces County dedicated in-person daily roster PDF, discovered from the current county page. Every parsed row is Early Voted with a native date and unique VUID; raw PDF/text remain only in anonymous pipes/memory. All dates use the county source consistently; native precinct labels absent from the 26P proxy remain unassigned. No votes are allocated to close SOS or map discrepancies.".into() }).collect())
 }
 #[cfg(test)]
 mod nueces_tests {

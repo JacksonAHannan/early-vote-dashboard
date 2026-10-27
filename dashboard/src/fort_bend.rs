@@ -337,7 +337,7 @@ pub async fn collect(
     let notes = availability_notes(&counts, &controls, year, n)?;
     let retrieved = Utc::now().to_rfc3339();
     Ok(notes.into_iter().map(|(date, availability)| Daily {
-        complete: false,
+        unavailable_precincts: Vec::new(), complete: false,
         county: r.id.clone(), date, counts: counts.remove(&date).unwrap(),
         source: roster_url.clone(), sha256: roster_sha.clone(), retrieved_at: retrieved.clone(),
         note: format!("Native in-person residence-precinct roster. {availability} Independent personal-appearance report: {control_url} (SHA256 {control_sha}). No mail ballots."),

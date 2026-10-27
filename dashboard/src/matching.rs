@@ -10,26 +10,53 @@ fn exact(sources: &[Daily], year: i32, day: u32, cumulative: bool) -> Option<&Da
         .filter(|d| d.date == date && d.cumulative == cumulative)
         .max_by_key(|d| &d.retrieved_at)
 }
+
+fn is_complete(source: &Daily, universe: &BTreeSet<String>) -> bool {
+    // Positive unproven labels may belong to missing native precincts.
+    // County-total reconciliation alone cannot establish those precinct zeros.
+    source.complete
+        && source.unavailable_precincts.is_empty()
+        && source
+            .counts
+            .iter()
+            .all(|(id, count)| *count == 0 || universe.contains(id))
+}
+
 pub fn full(sources: &[Daily], year: i32, day: u32, cumulative: bool) -> bool {
+    let universe = sources
+        .iter()
+        .filter(|s| s.date.year() == year)
+        .flat_map(|s| s.counts.keys().cloned())
+        .collect();
+    full_with_ids(sources, year, day, cumulative, &universe)
+}
+
+pub(crate) fn full_with_ids(
+    sources: &[Daily],
+    year: i32,
+    day: u32,
+    cumulative: bool,
+    universe: &BTreeSet<String>,
+) -> bool {
     if let Some(d) = exact(sources, year, day, cumulative) {
-        return d.complete;
+        return is_complete(d, universe);
     }
     if cumulative {
-        exact(sources, year, day, false).is_some_and(|d| d.complete)
-            && (day == 1 || full(sources, year, day - 1, true))
+        exact(sources, year, day, false).is_some_and(|d| is_complete(d, universe))
+            && (day == 1 || full_with_ids(sources, year, day - 1, true, universe))
     } else {
-        let Some(now) = exact(sources, year, day, true).filter(|d| d.complete) else {
+        let Some(now) = exact(sources, year, day, true).filter(|d| is_complete(d, universe)) else {
             return false;
         };
         if day == 1 {
             return true;
         }
-        if !full(sources, year, day - 1, true) {
+        if !full_with_ids(sources, year, day - 1, true, universe) {
             return false;
         }
         // A complete roster can contain a downward revision. That precinct's
         // daily difference is unknown, not an implicit zero in a complete day.
-        counts(sources, year, day - 1, true).is_some_and(|previous| {
+        counts_with_ids(sources, year, day - 1, true, universe).is_some_and(|previous| {
             previous
                 .iter()
                 .all(|(id, prior)| now.counts.get(id).copied().unwrap_or(0) >= *prior)
@@ -57,7 +84,16 @@ pub(crate) fn counts_with_ids(
     }
     if let Some(d) = exact(sources, year, day, cumulative) {
         let mut counts = d.counts.clone();
-        if d.complete {
+        let unavailable: BTreeSet<_> = d
+            .unavailable_precincts
+            .iter()
+            .map(|p| {
+                let p = normalize(p);
+                if p.is_empty() { "UNASSIGNED".into() } else { p }
+            })
+            .collect();
+        counts.retain(|p, _| !unavailable.contains(&normalize(p)));
+        if is_complete(d, universe) {
             for id in universe {
                 counts.entry(id.clone()).or_default();
             }
@@ -71,12 +107,13 @@ pub(crate) fn counts_with_ids(
             return counts_with_ids(sources, year, day, false, universe);
         }
         let previous = counts_with_ids(sources, year, day - 1, true, universe)?;
-        let prior_full = full(sources, year, day - 1, true);
-        let universe: BTreeSet<_> = previous.keys().chain(now_counts.keys()).cloned().collect();
+        let prior_full = full_with_ids(sources, year, day - 1, true, universe);
+        let now_full = is_complete(now, universe);
+        let keys: BTreeSet<_> = previous.keys().chain(now_counts.keys()).cloned().collect();
         let mut result = Counts::new();
-        for id in universe {
-            if (prior_full || previous.contains_key(&id))
-                && (now.complete || now_counts.contains_key(&id))
+        for id in keys {
+            if ((prior_full && universe.contains(&id)) || previous.contains_key(&id))
+                && ((now_full && universe.contains(&id)) || now_counts.contains_key(&id))
             {
                 result.insert(
                     id.clone(),
@@ -93,14 +130,20 @@ pub(crate) fn counts_with_ids(
         return Some(now_counts);
     }
     let previous = counts_with_ids(sources, year, day - 1, true, universe)?;
-    let prior_full = full(sources, year, day - 1, true);
-    let universe: BTreeSet<_> = now_counts.keys().chain(previous.keys()).cloned().collect();
+    let prior_full = full_with_ids(sources, year, day - 1, true, universe);
+    let now_full = is_complete(now, universe);
+    let keys: BTreeSet<_> = now_counts.keys().chain(previous.keys()).cloned().collect();
     Some(
-        universe
-            .into_iter()
+        keys.into_iter()
             .filter_map(|id| {
-                let a = previous.get(&id).copied().or(prior_full.then_some(0))?;
-                let b = now_counts.get(&id).copied().or(now.complete.then_some(0))?;
+                let a = previous
+                    .get(&id)
+                    .copied()
+                    .or((prior_full && universe.contains(&id)).then_some(0))?;
+                let b = now_counts
+                    .get(&id)
+                    .copied()
+                    .or((now_full && universe.contains(&id)).then_some(0))?;
                 b.checked_sub(a).map(|n| (id, n))
             })
             .collect(),
@@ -123,18 +166,8 @@ pub fn period(
         .iter()
         .flat_map(|g| g.new.iter().cloned())
         .collect();
-    let mut old = counts_with_ids(sources, 2024, day, cumulative, &old_ids)?;
-    let mut new = counts_with_ids(sources, 2026, day, cumulative, &new_ids)?;
-    if full(sources, 2024, day, cumulative) {
-        for id in reference.groups.iter().flat_map(|g| &g.old) {
-            old.entry(id.clone()).or_default();
-        }
-    }
-    if full(sources, 2026, day, cumulative) {
-        for id in reference.groups.iter().flat_map(|g| &g.new) {
-            new.entry(id.clone()).or_default();
-        }
-    }
+    let old = counts_with_ids(sources, 2024, day, cumulative, &old_ids)?;
+    let new = counts_with_ids(sources, 2026, day, cumulative, &new_ids)?;
     let mut p = analyze(reference, &old, &new, day).ok()?;
     p.coverage = MatchedCoverage {
         total_groups: p.groups.len() as u64,
@@ -199,6 +232,7 @@ mod tests {
     use super::*;
     fn source(year: i32, day: u32, values: &[(&str, u64)], complete: bool) -> Daily {
         Daily {
+            unavailable_precincts: Vec::new(),
             complete,
             county: "x".into(),
             date: start(year) + chrono::Duration::days(i64::from(day) - 1),
@@ -209,6 +243,120 @@ mod tests {
             note: String::new(),
             cumulative: false,
         }
+    }
+    #[test]
+    fn unmapped_positive_precinct_does_not_certify_exact_native_zeros() {
+        let ids = BTreeSet::from(["1".into(), "2".into()]);
+        let sources = [source(2026, 1, &[("1", 10), ("99999", 1)], true)];
+        let counts = counts_with_ids(&sources, 2026, 1, false, &ids).unwrap();
+        assert_eq!(counts["1"], 10);
+        assert_eq!(counts["99999"], 1);
+        assert!(!counts.contains_key("2"));
+        let zero_extra = [source(2026, 1, &[("1", 10), ("99999", 0)], true)];
+        assert_eq!(
+            counts_with_ids(&zero_extra, 2026, 1, false, &ids).unwrap()["2"],
+            0
+        );
+    }
+
+    #[test]
+    fn unmapped_positive_precinct_blocks_zero_inference_through_daily_prefix() {
+        let ids = BTreeSet::from(["1".into(), "2".into()]);
+        for unknown_day in [1, 2] {
+            let sources: Vec<_> = (1..=2)
+                .map(|day| {
+                    if day == unknown_day {
+                        source(2026, day, &[("1", 10), ("99999", 1)], true)
+                    } else {
+                        source(2026, day, &[("1", 10)], true)
+                    }
+                })
+                .collect();
+            let cumulative = counts_with_ids(&sources, 2026, 2, true, &ids).unwrap();
+            assert_eq!(cumulative["1"], 20);
+            assert!(
+                !cumulative.contains_key("2"),
+                "inferred a native zero across unmapped day {unknown_day}"
+            );
+        }
+    }
+
+    #[test]
+    fn unmapped_positive_cumulative_anchor_cannot_create_native_daily_zeros() {
+        let ids = BTreeSet::from(["1".into(), "2".into()]);
+        let mut anchor = source(2026, 2, &[("1", 15), ("99999", 1)], true);
+        anchor.cumulative = true;
+        let sources = [source(2026, 1, &[("1", 10)], true), anchor];
+        let cumulative = counts_with_ids(&sources, 2026, 2, true, &ids).unwrap();
+        assert_eq!(cumulative["1"], 15);
+        assert_eq!(cumulative["99999"], 1);
+        assert!(!cumulative.contains_key("2"));
+        let daily = counts_with_ids(&sources, 2026, 2, false, &ids).unwrap();
+        assert_eq!(daily["1"], 5);
+        assert!(!daily.contains_key("2"));
+    }
+
+    #[test]
+    fn unmapped_positive_counts_preserve_explicit_mapped_group_admission() {
+        let reference: Reference = serde_json::from_value(serde_json::json!({
+            "id":"x", "name":"X", "state_id":1,
+            "groups":[{"old":["1"],"new":["1"]},{"old":["2"],"new":["2"]}],
+            "exact_pairs":[["1","1"],["2","2"]],
+            "presidential":{"1":{"harris":60,"trump":40},"2":{"harris":60,"trump":40}},
+            "references":{}
+        }))
+        .unwrap();
+        let sources = [
+            source(2024, 1, &[("1", 20), ("2", 30)], true),
+            source(2026, 1, &[("1", 10), ("99999", 1)], true),
+        ];
+        let result = period(&reference, &sources, 1, false).unwrap();
+        assert_eq!(result.coverage.available_groups, 1);
+        assert!(result.groups[0].available);
+        assert!(!result.groups[1].available);
+        assert_eq!((result.county_2024, result.county_2026), (20, 10));
+    }
+
+    #[test]
+    fn explicit_unavailability_overrides_complete_and_stays_date_specific() {
+        let mut quarantined = source(2026, 1, &[("1", 9), ("2", 10)], true);
+        quarantined.unavailable_precincts = vec!["001".into()];
+        let sources = vec![quarantined, source(2026, 2, &[("1", 3), ("2", 4)], true)];
+        assert!(!full(&sources, 2026, 1, false));
+        assert!(!full(&sources, 2026, 2, true));
+        assert_eq!(
+            counts(&sources, 2026, 1, false).unwrap(),
+            Counts::from([("2".into(), 10)])
+        );
+        assert_eq!(counts(&sources, 2026, 2, false).unwrap()["1"], 3);
+        assert_eq!(
+            counts(&sources, 2026, 2, true).unwrap(),
+            Counts::from([("2".into(), 14)])
+        );
+        let mut anchor = source(2026, 3, &[("1", 14), ("2", 20)], true);
+        anchor.cumulative = true;
+        let mut anchored = sources;
+        anchored.push(anchor);
+        assert!(full(&anchored, 2026, 3, true));
+        assert_eq!(counts(&anchored, 2026, 3, true).unwrap()["1"], 14);
+    }
+
+    #[test]
+    fn quarantined_cumulative_anchor_does_not_create_daily_zero() {
+        let mut anchor = source(2026, 2, &[("2", 20)], true);
+        anchor.cumulative = true;
+        anchor.unavailable_precincts = vec!["1".into()];
+        let sources = vec![source(2026, 1, &[("1", 9), ("2", 10)], true), anchor];
+        assert!(!full(&sources, 2026, 2, true));
+        assert!(!full(&sources, 2026, 2, false));
+        assert_eq!(
+            counts(&sources, 2026, 2, true).unwrap(),
+            Counts::from([("2".into(), 20)])
+        );
+        assert_eq!(
+            counts(&sources, 2026, 2, false).unwrap(),
+            Counts::from([("2".into(), 10)])
+        );
     }
     #[test]
     fn cumulative_requires_each_precinct_day_but_daily_keeps_available_reports() {

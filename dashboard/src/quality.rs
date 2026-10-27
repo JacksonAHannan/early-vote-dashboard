@@ -163,6 +163,11 @@ impl Report {
             .into_iter()
             .filter(|d| matches!(d.date.year(), 2024 | 2026))
             .map(|mut d| {
+                d.unavailable_precincts = d.unavailable_precincts.iter().map(|p| {
+                    let p = crate::normalize(p);
+                    if p.is_empty() { "UNASSIGNED".into() } else { p }
+                }).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
+                d.counts.retain(|p, _| !d.unavailable_precincts.contains(&crate::normalize(p)));
                 let expected = self
                     .control(&d.county, d.date)
                     .and_then(|c| if d.cumulative { c.cumulative } else { c.daily });
@@ -170,6 +175,7 @@ impl Report {
                     d.note.push_str(&format!(" County control reports {n} votes; this source reports {}. Matched precinct counts use reported observations and remain subject to revision.",d.counts.values().sum::<u64>()));
                 }
                 d.complete = expected.is_some_and(|n| d.counts.values().sum::<u64>() == n)
+                    && d.unavailable_precincts.is_empty()
                     && d.counts.get("UNASSIGNED").copied().unwrap_or(0) == 0
                     && d.sha256 != HARRIS_2024_UNCONFIRMED_ZEROS;
                 d
@@ -352,8 +358,49 @@ mod tests {
     use super::*;
     use crate::start;
     #[test]
+    fn matching_control_cannot_recertify_quarantined_precincts() {
+        let d = Daily {
+            unavailable_precincts: vec!["001".into()],
+            complete: true,
+            county: "x".into(),
+            date: start(2026),
+            counts: crate::Counts::from([("1".into(), 9), ("2".into(), 10)]),
+            source: "official".into(),
+            sha256: "a".repeat(64),
+            retrieved_at: String::new(),
+            note: String::new(),
+            cumulative: false,
+        };
+        let report = Report {
+            controls: vec![Control {
+                county: "x".into(),
+                year: 2026,
+                date: start(2026),
+                daily: Some(10),
+                cumulative: Some(10),
+                source: "independent total".into(),
+                sha256: "b".repeat(64),
+                retrieved_at: String::new(),
+                scope: "in_person".into(),
+                completed: true,
+                note: String::new(),
+                precinct_total: None,
+                precinct_source: None,
+                precinct_sha256: None,
+            }],
+            ..Default::default()
+        };
+        let accepted = report.sources("x", &[d]);
+        assert_eq!(accepted[0].counts, crate::Counts::from([("2".into(), 10)]));
+        assert_eq!(accepted[0].unavailable_precincts, vec!["1"]);
+        assert!(!accepted[0].complete);
+        assert!(!crate::matching::full(&accepted, 2026, 1, false));
+    }
+
+    #[test]
     fn incomplete_county_controls_do_not_remove_reported_precincts() {
         let d = Daily {
+            unavailable_precincts: Vec::new(),
             complete: false,
             county: "x".into(),
             date: start(2026),
@@ -381,6 +428,7 @@ mod tests {
     #[test]
     fn historical_age_does_not_prove_an_absent_precinct_had_zero_votes() {
         let mut d = Daily {
+            unavailable_precincts: Vec::new(),
             complete: true,
             county: "x".into(),
             date: start(2024),

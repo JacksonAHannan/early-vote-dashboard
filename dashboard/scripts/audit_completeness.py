@@ -245,6 +245,18 @@ def workbook(raw):
         return result
 
 
+def dated_workbook_cutoff(source, year):
+    # WordPress adds -1, -2, ... when a publisher replaces a named workbook.
+    # That suffix does not change the explicit reporting date or its scope.
+    match = re.search(r'_(\d{2}\.\d{2}\.\d{2})(?:-\d+)?\.xlsx$', source)
+    if not match:
+        raise ValueError('Dallas dated report cutoff absent')
+    cutoff = datetime.strptime(match[1], '%m.%d.%y').date()
+    if cutoff.year != year:
+        raise ValueError('Dallas report cutoff election year mismatch')
+    return cutoff
+
+
 def dallas(through,offline,year=2026):
     if year==2024:
         source='https://www.dallascountyvotes.org/wp-content/uploads/2024/11/Early-Voting-Turnout-By-Date-Location-Report_11.01.24.xlsx'
@@ -278,9 +290,7 @@ def dallas(through,offline,year=2026):
         if sum(int(row.get(c,'0')) for c in columns)!=int(row[cumulative_column]):raise ValueError('Dallas site cumulative mismatch')
     # Dated daily report filenames identify a closed reporting cutoff; never
     # certify zeros after that cutoff, even if a caller asks for a later day.
-    match=re.search(r'_(\d{2}\.\d{2}\.\d{2})\.xlsx$',source)
-    if not match:raise ValueError('Dallas dated report cutoff absent')
-    cutoff=datetime.strptime(match[1],'%m.%d.%y').date()
+    cutoff=dated_workbook_cutoff(source,year)
     values={d:n for d,n in values.items() if d<=cutoff}
     return sequence('dallas',year,values,source,raw,through,
                     f'Official dated county in-person location workbook through {cutoff}; every site and daily total reconciled. Mail excluded; future zero placeholders excluded. County administrative revisions can change prior dates.')

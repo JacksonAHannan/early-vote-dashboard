@@ -238,7 +238,7 @@ pub async fn fetch_state(
             .iter()
             .find(|s| s.year == 2024 && s.date == date)
     {
-        return Ok(Daily { complete: false, county: reference.id.clone(), date, counts: Counts::new(), source: source.url.clone(), sha256: source.sha256.clone(), retrieved_at: source.retrieved_at.clone(), cumulative: false, note: "Official dated Texas SOS historical county aggregate explicitly confirms zero in-person votes. An empty roster alone is never treated as zero; current unconfirmed zeros are excluded.".into() });
+        return Ok(Daily { unavailable_precincts: Vec::new(), complete: false, county: reference.id.clone(), date, counts: Counts::new(), source: source.url.clone(), sha256: source.sha256.clone(), retrieved_at: source.retrieved_at.clone(), cumulative: false, note: "Official dated Texas SOS historical county aggregate explicitly confirms zero in-person votes. An empty roster alone is never treated as zero; current unconfirmed zeros are excluded.".into() });
     }
     let (url, form) = if date.format("%Y").to_string() == "2024" {
         (
@@ -287,6 +287,7 @@ pub async fn fetch_state(
         note.push_str(" A reviewed hash-pinned repeated CSV record is counted once; differing records and additional duplicates still fail validation. Control shortfalls remain unknown rather than inferred zeros.");
     }
     Ok(Daily {
+        unavailable_precincts: Vec::new(),
         complete: false,
         county: reference.id.clone(),
         date,
