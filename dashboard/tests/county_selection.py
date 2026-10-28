@@ -43,6 +43,12 @@ with sync_playwright() as p:
  try:
   page.goto(BASE+'/#precinct-trends',wait_until='networkidle',timeout=180000)
   page.wait_for_function('data&&matrixReady()&&Visuals',timeout=120000)
+  # Anchor the named-county export fixture to its latest supported date. Newest-day
+  # reports for all three can legitimately be unavailable after an hourly refresh.
+  fixture_day=page.evaluate("Math.max(...data.counties.filter(c=>['cameron','hidalgo','starr'].includes(c.id)).flatMap(c=>c.periods.filter(p=>p.coverage?.available_groups>0).map(p=>p.day)))")
+  assert fixture_day>=1
+  page.get_by_role('button',name=f'Day {fixture_day}',exact=True).click()
+  page.wait_for_function('matrixReady()',timeout=120000)
   # The all-selected total initially exactly equals All Counties.
   assert page.locator('#matrix tbody .matrix-total:not(.matrix-selection-total)').all_text_contents()==page.locator('#matrix tbody .matrix-selection-total').all_text_contents()
   page.locator('#matrix-county-picker summary').click()
