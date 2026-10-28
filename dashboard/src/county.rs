@@ -1845,11 +1845,11 @@ fn nueces_roster_link(html: &str, base: &str) -> Result<String> {
     );
     Ok(links.remove(0))
 }
-fn nueces_counts(text: &str, n: u32) -> Result<BTreeMap<NaiveDate, Counts>> {
+fn nueces_counts(text: &str, n: u32) -> Result<CountyRoster> {
     ensure!((1..=12).contains(&n), "invalid Nueces cutoff");
     let first = start(2026);
     let last = first + chrono::Duration::days(i64::from(n - 1));
-    let mut days: BTreeMap<NaiveDate, Counts> = BTreeMap::new();
+    let mut roster = CountyRoster::default();
     let mut seen = std::collections::BTreeSet::new();
     for line in text.lines() {
         let lower = line.to_ascii_lowercase();
@@ -1862,20 +1862,16 @@ fn nueces_counts(text: &str, n: u32) -> Result<BTreeMap<NaiveDate, Counts>> {
                 .split_whitespace()
                 .take(2)
                 .any(|s| s.bytes().all(|c| c.is_ascii_digit()));
-            ensure!(
-                !(at.is_some() && possible_id),
-                "Nueces identifier layout changed"
-            );
-            continue;
+            if at.is_none() || !possible_id {
+                continue;
+            }
         }
         let at = at.context("Nueces voter row type or layout changed")?;
         let mut fields = line[..at].split_whitespace();
         let precinct = fields.next().context("Nueces row has no precinct")?;
         let id = fields.next().context("Nueces row has no identifier")?;
         ensure!(
-            (8..=10).contains(&id.len())
-                && id.bytes().all(|c| c.is_ascii_digit())
-                && fields.next().is_some(),
+            !id.is_empty() && id.bytes().all(|c| c.is_ascii_digit()) && fields.next().is_some(),
             "Nueces row identity layout changed"
         );
         ensure!(
@@ -1895,22 +1891,16 @@ fn nueces_counts(text: &str, n: u32) -> Result<BTreeMap<NaiveDate, Counts>> {
             "Nueces repeated in-person identifier"
         );
         if when <= last {
-            *days
-                .entry(when)
-                .or_default()
-                .entry(normalize(precinct))
-                .or_default() += 1;
+            // A numeric ID outside the verified VUID layout is not a new
+            // identity rule. Quarantine its exact date/precinct cell, retaining
+            // all other observed cells through the shared roster mechanism.
+            let verified_id = if (8..=10).contains(&id.len()) { id } else { "" };
+            roster.record(verified_id, when, precinct, false)?;
         }
     }
-    for offset in 0..n {
-        ensure!(
-            days.contains_key(&(first + chrono::Duration::days(i64::from(offset)))),
-            "Nueces requested daily report unavailable"
-        );
-    }
-    Ok(days)
+    Ok(roster)
 }
-async fn nueces(client: &reqwest::Client, r: &Reference, n: u32) -> Result<Vec<Daily>> {
+async fn nueces_native(client: &reqwest::Client, r: &Reference, n: u32) -> Result<Vec<Daily>> {
     use std::process::Stdio;
     use tokio::io::AsyncWriteExt;
     let page = "https://www.nuecesco.com/county-services/county-clerk/elections-department";
@@ -1935,12 +1925,59 @@ async fn nueces(client: &reqwest::Client, r: &Reference, n: u32) -> Result<Vec<D
     writer.await??;
     ensure!(output.status.success(), "Nueces PDF text extraction failed");
     let text = String::from_utf8(output.stdout).context("Nueces extracted text is not UTF-8")?;
-    let stamp = chrono::Utc::now().to_rfc3339();
-    Ok(nueces_counts(&text,n)?.into_iter().map(|(date,counts)| Daily { zero_evidence: Vec::new(), allow_daily_difference: None, unavailable_precincts: Vec::new(), complete: false, county:r.id.clone(),date,counts,source:source.clone(),sha256:hash.clone(),retrieved_at:stamp.clone(),cumulative:false,note:"Official Nueces County dedicated in-person daily roster PDF, discovered from the current county page. Every parsed row is Early Voted with a native date and unique VUID; raw PDF/text remain only in anonymous pipes/memory. All dates use the county source consistently; native precinct labels absent from the 26P proxy remain unassigned. No votes are allocated to close SOS or map discrepancies.".into() }).collect())
+    nueces_counts(&text, n)?.days(r, 2026, n, &source, &hash,
+        "Official Nueces County dedicated in-person daily roster PDF, rediscovered from the current county page. Every included row is Early Voted with an exact native date and unique verified 8–10 digit VUID. Numeric identifiers outside that layout are treated as unavailable identities and their entire date/precinct cell is quarantined; no identifier is padded or shortened. Raw PDF/text remain only in anonymous pipes/memory. Missing dates remain unavailable; native precinct labels absent from the 26P proxy remain unassigned. No votes are allocated to close SOS or map discrepancies.")
+}
+
+async fn nueces(client: &reqwest::Client, r: &Reference, n: u32) -> Result<Vec<Daily>> {
+    let mut values = match nueces_native(client, r, n).await {
+        Ok(values) => values,
+        Err(error) => {
+            eprintln!("Nueces native roster: {error:#}; trying independent dated SOS sources");
+            Vec::new()
+        }
+    };
+    let mut identities = BTreeSet::new();
+    for offset in 0..n {
+        let date = start(2026) + chrono::Duration::days(i64::from(offset));
+        if !values.iter().any(|value| value.date == date) {
+            match crate::fetch::fetch_state(client, r, date, &mut identities).await {
+                Ok(value) => values.push(value),
+                Err(error) => eprintln!("Nueces dated SOS {date}: {error:#}"),
+            }
+        }
+    }
+    ensure!(
+        !values.is_empty(),
+        "no usable Nueces native or dated SOS observations"
+    );
+    values.sort_by_key(|value| value.date);
+    Ok(values)
 }
 #[cfg(test)]
 mod nueces_tests {
     use super::*;
+    fn dated(text: &str, n: u32) -> Result<Vec<Daily>> {
+        let reference = serde_json::from_value(serde_json::json!({
+            "id":"nueces", "name":"Nueces", "state_id":178, "groups":[],
+            "exact_pairs":[], "presidential":{}, "references":{}
+        }))?;
+        nueces_counts(text, n)?.days(&reference, 2026, n, "official", "hash", "Scope.")
+    }
+    #[test]
+    fn short_numeric_identity_and_unposted_date_do_not_reject_other_observations() {
+        let text = "0001 1234567890 EXAMPLE Early Voted 10/19/2026\n0002 1234567 SHORT Early Voted 10/20/2026\n0002 1234567891 SAME CELL Early Voted 10/20/2026\n0003 1234567892 VALID Early Voted 10/20/2026\n";
+        assert!(
+            nueces_counts(text, 3).is_ok(),
+            "one unusable identity cell and one unposted date must not discard independent observations"
+        );
+        let days = dated(text, 3).unwrap();
+        assert_eq!(days.len(), 2);
+        assert_eq!(days[0].counts, Counts::from([("1".into(), 1)]));
+        assert_eq!(days[1].counts, Counts::from([("3".into(), 1)]));
+        assert_eq!(days[1].unavailable_precincts, vec!["2"]);
+        assert!(days.iter().all(|day| !day.complete && !day.cumulative));
+    }
     #[test]
     fn discovers_only_in_person_link_and_parses_touching_name_type() {
         let html = r#"<a href="/mail">Early Voting Daily Roster (Mail)</a><a href="/home/showpublisheddocument/34763"><span>Early Voting Daily Roster (In Person)</span></a>"#;
@@ -1950,11 +1987,11 @@ mod nueces_tests {
                 .ends_with("/34763")
         );
         let text = "Roster for Early Voted\nPrecinct VUID Name Type Date\n0001 1234567890 EXAMPLE NAMEEarly Voted 10/19/2026\n0002 1234567891 OTHER NAME Early Voted 10/20/2026\n0003 12345678 SHORT ID Early Voted 10/20/2026\n0004 123456789 SHORT ID Early Voted 10/20/2026\n";
-        let counts = nueces_counts(text, 2).unwrap();
-        assert_eq!(counts[&start(2026)]["1"], 1);
-        assert_eq!(counts[&(start(2026) + chrono::Duration::days(1))]["3"], 1);
-        assert_eq!(counts[&(start(2026) + chrono::Duration::days(1))]["4"], 1);
-        assert!(nueces_counts(text, 3).is_err());
+        let counts = dated(text, 2).unwrap();
+        assert_eq!(counts[0].counts["1"], 1);
+        assert_eq!(counts[1].counts["3"], 1);
+        assert_eq!(counts[1].counts["4"], 1);
+        assert_eq!(dated(text, 3).unwrap().len(), 2);
         assert!(
             nueces_counts(
                 &format!("{text}0002 1234567890 SAME Early Voted 10/20/2026\n"),
@@ -1963,13 +2000,13 @@ mod nueces_tests {
             .is_err()
         );
         assert!(nueces_counts("0001 1234567890 EXAMPLE Mail Voted 10/19/2026", 1).is_err());
-        assert!(
-            nueces_counts(
-                &format!("{text}0005 1234567 SHORT Early Voted 10/20/2026\n"),
-                2
-            )
-            .is_err()
-        );
+        let quarantined = dated(
+            &format!("{text}0005 1234567 SHORT Early Voted 10/20/2026\n"),
+            2,
+        )
+        .unwrap();
+        assert_eq!(quarantined[1].unavailable_precincts, vec!["5"]);
+        assert!(!quarantined[1].counts.contains_key("5"));
         assert!(
             nueces_counts(
                 &format!("{text}0005 UNKNOWN NAME Early Voted 10/20/2026\n"),

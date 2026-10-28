@@ -4,6 +4,7 @@ The hourly Rust refresh now discovers current county publications, validates eac
 
 - [State downloads and all 248 admitted counties](state/report.md): exact official endpoint/date verification; 62 positive in-person, 121 mail-only and 65 empty responses during the October 27 probe; bounded retries for rate limits, gateway failures and interrupted bodies.
 - [Large-county adapters and control continuity](large/report.md): recurring Cameron and Denton discovery, full-label identity proof, Travis/Montgomery date isolation, portable Dallas 2024 controls and correct county-versus-state control priority.
+- [Nueces replacement PDF](nueces/report.md): isolate the one invalid identifier cell, retain the other dated observations and try dated state reports after native failures.
 - [Native collector evolution](native/report.md): Collin replacement headers, Panola next-morning exports, next-edition fallback and revalidation of all alias evidence.
 
 The default refresh cutoff remains the last completed Central-time day. A new successful request does not make an empty or mail-only export a precinct report. Missing or contradictory publications remain unavailable and are retried on later hourly runs. No source age, polling-place total or county aggregate is used to fabricate precinct votes. Existing geographic and demographic matching rules remain in force.
