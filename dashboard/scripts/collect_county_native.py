@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import base64
 import collections
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 import hashlib
 import io
@@ -230,8 +231,11 @@ def derive_aliases(native_rows, sos_raw, universe):
         votes[(label, precinct)] += 1
     aliases = {label: next(iter(targets)) for label, targets in associations.items()
                if len(targets) == 1 and next(iter(targets)) in universe}
-    proof = [{'native': label, 'precinct': p, 'matched_rows': votes[(label, p)]}
-             for label, p in sorted(aliases.items())]
+    # Retain foreign single targets too: a later dated source can disprove an
+    # earlier native alias without having two targets within that one file.
+    proof = [{'native': label, 'precinct': next(iter(targets)),
+              'matched_rows': votes[(label, next(iter(targets)))]}
+             for label, targets in sorted(associations.items()) if len(targets) == 1]
     proof += [{'native': label, 'conflicting_targets': sorted(targets)}
               for label, targets in sorted(associations.items()) if len(targets) > 1]
     return aliases, proof, hashlib.sha256(raw).hexdigest()
@@ -303,10 +307,10 @@ def collect(county, through, downloader=download):
     universe = {p for group in reference['groups'] for p in group['new']}
     sources = discover(county, downloader(LANDINGS[county]).decode())
     last_completed = datetime.now(ZoneInfo('America/Chicago')).date() - timedelta(days=1)
-    files = {}
-    for when, url in sorted(sources.items()):
-        if not date(2026, 10, 19) <= when <= min(through, last_completed, date(2026, 10, 30)):
-            continue
+    sources = {when: url for when, url in sources.items()
+               if date(2026, 10, 19) <= when <= min(through, last_completed, date(2026, 10, 30))}
+    def fetch_file(item):
+        when, url = item
         try:
             raw = downloader(url)
             if county == 'washington':
@@ -315,10 +319,15 @@ def collect(county, through, downloader=download):
                 rows = parse_waller(pdf_text(raw), when)
             else:
                 rows = parse_sanpatricio(pdf_text(raw), when)
-            files[when] = dict(rows=rows, source=quote(url, safe=':/?&=%'), sha256=hashlib.sha256(raw).hexdigest())
+            return when, dict(rows=rows, source=quote(url, safe=':/?&=%'), sha256=hashlib.sha256(raw).hexdigest())
         except Exception as error:
             print(json.dumps(dict(county=county, date=when.isoformat(), status='unavailable',
                                   error=type(error).__name__)), file=sys.stderr)
+            return when, None
+    # A single slow source must not serially delay every other completed day.
+    # Bound official-host concurrency; results retain deterministic date order.
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        files = {when: file for when, file in pool.map(fetch_file, sorted(sources.items())) if file is not None}
     aliases, proof_notes = {}, []
     targets = collections.defaultdict(set)
     unknown_labels = {p for file in files.values() for _, p in file['rows'] if p not in universe}
@@ -326,24 +335,47 @@ def collect(county, through, downloader=download):
     # Unavailable SOS files leave unproven labels outside matched geography.
     proof_days = sorted(files, key=lambda d: (d != date(2026, 10, 21), d))
     if county in ('washington', 'sanpatricio'):
-        for proof_day in proof_days:
-            if unknown_labels.issubset(aliases):
-                break
+        def fetch_proof(proof_day):
             try:
                 source = sos_url(county, proof_day)
                 found, proof, sha = derive_aliases(files[proof_day]['rows'], downloader(source), universe)
+                return source, proof, sha
+            except Exception as error:
+                print(json.dumps(dict(county=county, date=proof_day.isoformat(),
+                                      status='alias-proof-unavailable', error=type(error).__name__)), file=sys.stderr)
+                return None
+        # Recheck every advertised completed date on every refresh. Stopping
+        # once labels look resolved freezes a crosswalk before new evidence.
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            proofs = list(pool.map(fetch_proof, proof_days)) if unknown_labels else []
+        for result in proofs:
+            if result is not None:
+                source, proof, sha = result
                 for item in proof:
                     targets[item['native']].update(item.get('conflicting_targets', [item.get('precinct')]))
                 aliases = {label: next(iter(values)) for label, values in targets.items()
                            if len(values) == 1 and next(iter(values)) in universe}
                 proof_notes.append(json.dumps(dict(source=quote(source, safe=':/?&=%'), sha256=sha,
                                                    aliases=proof), separators=(',', ':')))
-            except Exception as error:
-                print(json.dumps(dict(county=county, date=proof_day.isoformat(),
-                                      status='alias-proof-unavailable', error=type(error).__name__)), file=sys.stderr)
     for file in files.values():
         file['alias_proof'] = ' '.join(proof_notes)
-    return aggregate(county, files, universe, aliases)
+        # Alias evidence changes the aggregate even when the roster itself is
+        # unchanged, so it must also change the derived input identity.
+        file['native_sha256'] = file['sha256']
+        manifest = dict(native_sha256=file['sha256'], alias_evidence=proof_notes,
+                        method='all-completed-date-exact-identity-alias-v2')
+        file['sha256'] = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    output = aggregate(county, files, universe, aliases)
+    for daily in output:
+        when = date.fromisoformat(daily['date'])
+        labels = {label for _, label in files[when]['rows']}
+        affected = {target for label in labels if label not in aliases
+                    for target in targets.get(label, ()) if target in universe}
+        daily['unavailable_precincts'] = sorted(set(daily['unavailable_precincts']) | affected)
+        for target in affected:
+            daily['counts'].pop(target, None)
+        daily['note'] += ' Native roster SHA256 ' + files[when]['native_sha256'] + '; derived SHA256 also binds all completed-date alias evidence.'
+    return output
 
 
 def main():

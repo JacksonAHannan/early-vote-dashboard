@@ -1,6 +1,7 @@
 """Internal HTTP transport. All response payloads stay in anonymous process pipes."""
 import json
 import sys
+from time import sleep
 from urllib.parse import urlparse
 
 GEORGIA_PUBLIC_HOST = 'd11khjvhu86vzz.cloudfront.net'
@@ -45,16 +46,28 @@ def download(request):
     from curl_cffi import requests
     url, headers = request['url'], request.get('headers')
     with requests.Session(impersonate='chrome') as session:
-        if request.get('form'):
-            response = session.post(url, data=request['form'], headers=headers, timeout=120)
-        else:
-            response = session.get(url, headers=headers, timeout=120)
-    if needs_browser(url, response.status_code):
-        return browser_download(url, headers)
-    response.raise_for_status()
-    if response.status_code == 202:
-        raise RuntimeError('official source not ready')
-    return response.content
+        for attempt in range(2):
+            try:
+                if request.get('form'):
+                    response = session.post(url, data=request['form'], headers=headers, timeout=120)
+                else:
+                    response = session.get(url, headers=headers, timeout=120)
+            except requests.RequestsError:
+                # curl eagerly reads the complete response. A timeout/partial body
+                # must retry the same request, never return its incomplete bytes.
+                if attempt:
+                    raise
+                sleep(0.5)
+                continue
+            if needs_browser(url, response.status_code):
+                return browser_download(url, headers)
+            if not attempt and (response.status_code == 429 or response.status_code >= 500):
+                sleep(0.5)
+                continue
+            response.raise_for_status()
+            if response.status_code == 202:
+                raise RuntimeError('official source not ready')
+            return response.content
 
 
 def main():

@@ -49,6 +49,22 @@ fn atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     std::fs::rename(tmp, path)?;
     Ok(())
 }
+fn save_snapshot(root: &Path, snapshot: &Snapshot, archive: &str) -> Result<()> {
+    let proof = quality::Report::load(root)
+        .unwrap_or_default()
+        .provenance()?;
+    ensure!(
+        format!("{:x}", Sha256::digest(&proof)) == snapshot.completeness_sha256,
+        "Qualification changed during snapshot publication; retained edition preserved"
+    );
+    let bytes = serde_json::to_vec_pretty(snapshot)?;
+    let archived = root.join("data/snapshots").join(archive);
+    atomic(&archived.with_extension("qualification.json"), &proof)?;
+    atomic(&archived, &bytes)?;
+    atomic(&root.join("data/latest.qualification.json"), &proof)?;
+    atomic(&root.join("data/latest.json"), &bytes)
+}
+
 async fn refresh(app: &App) -> Result<()> {
     let _guard = app.updating.try_lock().context("refresh already running")?;
     refresh_locked(app).await
@@ -114,8 +130,9 @@ async fn refresh_precincts(app: &App) -> Result<()> {
         jobs.spawn(async move {
             let _permit = semaphore.acquire_owned().await.unwrap();
             let mut daily = Vec::new();
-            let mut failure = None;
-            for year in [2024, 2026] {
+            let mut failures = Vec::new();
+            // Current observations are collected before any missing historical baseline.
+            for year in [2026, 2024] {
                 let cache = app
                     .root
                     .join(format!("data/cache/{}/{year}-series.json", reference.id));
@@ -158,7 +175,7 @@ async fn refresh_precincts(app: &App) -> Result<()> {
                         {
                             Ok(value) => values.push(value),
                             Err(error) => {
-                                failure = Some(format!(
+                                failures.push(format!(
                                     "{year} {date}: {error:#}; other reported dates retained"
                                 ))
                             }
@@ -168,9 +185,18 @@ async fn refresh_precincts(app: &App) -> Result<()> {
                 };
                 let mut values = cached.unwrap_or_default();
                 match series {
-                    Ok(fresh) => values = trends::merge_sources(values.into_iter().chain(fresh)),
+                    Ok(fresh) => {
+                        if year == 2026 && !fresh.iter().any(|d| d.date == through) {
+                            let latest = fresh.iter().map(|d| d.date.to_string()).max()
+                                .unwrap_or_else(|| "none".into());
+                            failures.push(format!(
+                                "2026: no usable source for {through}; latest downloaded date {latest}; earlier reported dates retained"
+                            ));
+                        }
+                        values = trends::merge_sources(values.into_iter().chain(fresh));
+                    },
                     Err(error) => {
-                        failure = Some(format!(
+                        failures.push(format!(
                             "{year}: {error:#}; earlier reported dates retained"
                         ))
                     }
@@ -178,7 +204,7 @@ async fn refresh_precincts(app: &App) -> Result<()> {
                 if !values.is_empty() {
                     if let Err(error) = atomic(&cache, &serde_json::to_vec_pretty(&values).unwrap())
                     {
-                        failure = Some(error.to_string());
+                        failures.push(error.to_string());
                     }
                     daily.extend(values);
                 }
@@ -186,6 +212,7 @@ async fn refresh_precincts(app: &App) -> Result<()> {
             if let Some(prior) = prior {
                 daily = trends::merge_sources(prior.sources.into_iter().chain(daily));
             }
+            let failure = (!failures.is_empty()).then(|| failures.join(" · "));
             let now = Utc::now().to_rfc3339();
             if let Some(error) = &failure {
                 eprintln!("{}: {error}", reference.name);
@@ -239,15 +266,11 @@ async fn refresh_precincts(app: &App) -> Result<()> {
         counties,
     };
     let snapshot = quality::qualify(&app.root, &snapshot)?;
-    let bytes = serde_json::to_vec_pretty(&snapshot)?;
-    atomic(
-        &app.root.join(format!(
-            "data/snapshots/{}.json",
-            Utc::now().format("%Y%m%dT%H%M%S%fZ")
-        )),
-        &bytes,
+    save_snapshot(
+        &app.root,
+        &snapshot,
+        &format!("{}.json", Utc::now().format("%Y%m%dT%H%M%S%fZ")),
     )?;
-    atomic(&app.root.join("data/latest.json"), &bytes)?;
     *app.snapshot.write().await = snapshot;
     let script = app.root.join("scripts/render_images.py");
     let output = tokio::process::Command::new("uv")
@@ -779,19 +802,15 @@ async fn main() -> Result<()> {
     }
     if args.get(1).is_some_and(|s| s == "rebuild") {
         let snapshot = rebuild::from_cache(&root, through.unwrap_or_else(latest_completed))?;
-        let bytes = serde_json::to_vec_pretty(&snapshot)?;
         let history = rebuild::history_from_cache(&root, &snapshot)?;
         atomic(
             &root.join("data/history.json"),
             &serde_json::to_vec_pretty(&history)?,
         )?;
-        atomic(&root.join("data/latest.json"), &bytes)?;
-        atomic(
-            &root.join(format!(
-                "data/snapshots/{}-cached.json",
-                Utc::now().format("%Y%m%dT%H%M%S%fZ")
-            )),
-            &bytes,
+        save_snapshot(
+            &root,
+            &snapshot,
+            &format!("{}-cached.json", Utc::now().format("%Y%m%dT%H%M%S%fZ")),
         )?;
         println!(
             "Rebuilt {} precinct counties from retained aggregates",
@@ -1031,4 +1050,48 @@ async fn main() -> Result<()> {
     println!("http://127.0.0.1:{port}");
     axum::serve(listener, router).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod refresh_snapshot_tests {
+    use super::*;
+
+    #[test]
+    fn recurring_snapshot_freezes_the_exact_qualification_input() {
+        let root = std::env::temp_dir().join(format!(
+            "turnout-proof-{}-{}",
+            std::process::id(),
+            Utc::now().timestamp_nanos_opt().unwrap()
+        ));
+        std::fs::create_dir_all(root.join("data")).unwrap();
+        let report = quality::Report {
+            schema_version: 1,
+            generated_at: "fixture".into(),
+            ..Default::default()
+        };
+        std::fs::write(
+            root.join("data/completeness.json"),
+            serde_json::to_vec(&report).unwrap(),
+        )
+        .unwrap();
+        let mut snapshot = empty();
+        snapshot.completeness_sha256 =
+            format!("{:x}", Sha256::digest(report.provenance().unwrap()));
+        save_snapshot(&root, &snapshot, "fixture.json").unwrap();
+        let frozen = std::fs::read(root.join("data/latest.qualification.json")).unwrap();
+        assert_eq!(frozen, report.provenance().unwrap());
+        assert_eq!(
+            std::fs::read(root.join("data/snapshots/fixture.qualification.json")).unwrap(),
+            frozen
+        );
+        assert_eq!(
+            format!("{:x}", Sha256::digest(frozen)),
+            snapshot.completeness_sha256
+        );
+        let prior = std::fs::read(root.join("data/latest.json")).unwrap();
+        snapshot.completeness_sha256 = "0".repeat(64);
+        assert!(save_snapshot(&root, &snapshot, "invalid.json").is_err());
+        assert_eq!(std::fs::read(root.join("data/latest.json")).unwrap(), prior);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

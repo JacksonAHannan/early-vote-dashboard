@@ -3,6 +3,7 @@
 import argparse
 import base64
 import collections
+from concurrent.futures import ThreadPoolExecutor
 import csv
 from datetime import date, datetime, timedelta, timezone
 import hashlib
@@ -12,6 +13,7 @@ from pathlib import Path
 import re
 import sys
 from urllib.parse import urljoin
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "dashboard/scripts"))
@@ -32,8 +34,14 @@ def parse_panola(text, when):
     # explicit VRH batch trailer. That fragment is outside the actual batch.
     text = text[:trailer.start()]
     headers = re.findall(r"HPanola\s+183VRH\s+(\d{14})", text)
-    if len(headers) != 1 or datetime.strptime(headers[0], "%Y%m%d%H%M%S").date() != when:
-        raise ValueError("Panola VRH export timestamp does not match voting day")
+    # VRH's header is the export timestamp, not the voting date. The Oct27
+    # batch was published the following morning. Keep the narrow observed
+    # export window, while every individual event below must match `when`.
+    if len(headers) != 1:
+        raise ValueError("Panola VRH export timestamp unavailable or ambiguous")
+    exported = datetime.strptime(headers[0], "%Y%m%d%H%M%S").date()
+    if not when <= exported <= min(when + timedelta(days=1), datetime.now(ZoneInfo('America/Chicago')).date()):
+        raise ValueError("Panola VRH export timestamp outside daily publication window")
     starts = list(re.finditer(r"(?m)^\s*DPanola\s+183(\d{0,10})\s+(\d+)\b", text))
     if not starts or len(starts) != len(re.findall(r"DPanola", text)):
         raise ValueError("Panola empty or unparsed detail record")
@@ -53,6 +61,7 @@ def parse_panola(text, when):
 
 
 def discover(html, through):
+    through = min(through, datetime.now(ZoneInfo('America/Chicago')).date() - timedelta(days=1))
     marker = "Early Voting Turnout for November 3rd 2026 Uniform Election"
     if marker not in html:
         raise ValueError("Panola current-election roster section unavailable")
@@ -73,8 +82,8 @@ def discover(html, through):
 
 
 def collect_files(links, download=native.download, pdf_text=native.pdf_text):
-    files, errors = {}, {}
-    for when, url in sorted(links.items()):
+    def fetch_file(item):
+        when, url = item
         try:
             raw = download(url)
             text = pdf_text(raw)
@@ -85,11 +94,19 @@ def collect_files(links, download=native.download, pdf_text=native.pdf_text):
             blanks = sum(not identity for identity, _ in rows)
             if len(frequencies) + blanks != total:
                 raise ValueError("Panola native trailer does not reconcile unique and blank identities")
-            files[when] = dict(rows=rows, source=url, sha256=hashlib.sha256(raw).hexdigest(),
+            return when, dict(rows=rows, source=url, sha256=hashlib.sha256(raw).hexdigest(),
                                native_trailer_total=total, valid_unique_ids=len(frequencies),
-                               blank_or_short_ids=blanks)
+                               blank_or_short_ids=blanks), None
         except Exception as error:
-            errors[when.isoformat()] = str(error) if isinstance(error, ValueError) and str(error).startswith("Panola") else type(error).__name__
+            message = str(error) if isinstance(error, ValueError) and str(error).startswith("Panola") else type(error).__name__
+            return when, None, message
+    files, errors = {}, {}
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        for when, file, error in pool.map(fetch_file, sorted(links.items())):
+            if file is not None:
+                files[when] = file
+            else:
+                errors[when.isoformat()] = error
     return files, errors
 
 
@@ -148,14 +165,20 @@ def collect(through):
     if not files:
         raise ValueError("No usable Panola daily in-person source")
     state, manifests = {}, []
-    for when in sorted(files):
+    def fetch_state(when):
         url = sos_url(when)
         try:
             rows, digest = state_records(native.download(url))
-            state[when] = rows
-            manifests.append(dict(date=when.isoformat(), source=url, sha256=digest, in_person_rows=len(rows)))
+            return when, rows, dict(date=when.isoformat(), source=url, sha256=digest, in_person_rows=len(rows)), None
         except Exception as error:
-            errors[when.isoformat() + ":identity-source"] = type(error).__name__
+            return when, None, None, type(error).__name__
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        for when, rows, manifest, error in pool.map(fetch_state, sorted(files)):
+            if rows is not None:
+                state[when] = rows
+                manifests.append(manifest)
+            else:
+                errors[when.isoformat() + ":identity-source"] = error
     aliases, proof, associations = prove_aliases(files, state, universe)
     manifest = dict(method="panola-vrh-exact-identity-alias-v1", landing_source=LANDING,
                     landing_sha256=hashlib.sha256(landing_raw).hexdigest(), state_sources=manifests,

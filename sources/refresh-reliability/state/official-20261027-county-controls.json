@@ -1,0 +1,2296 @@
+{
+  "url": "https://goelect.txelections.civixapps.com/api-ivis-system/api/v1/getFile?type=EVR_EARLYVOTING&electionId=53815&electionDate=10%2F27%2F2026",
+  "checked_at": "2026-10-28T15:28:49.021096+00:00",
+  "status": 200,
+  "sha256": "5fcf8e8970fe2cf84d45564423c6b990b5aed14deaf739dd5ce35367d2eb7d05",
+  "date_updated": "2026-10-27",
+  "early_voting_date": "2026-10-27",
+  "counties": [
+    {
+      "name": "ANDERSON",
+      "id": 1,
+      "registered_voters": 31222,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 7058,
+      "total_mail_votes_for_election": 234,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "ANDREWS",
+      "id": 2,
+      "registered_voters": 10820,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1758,
+      "total_mail_votes_for_election": 36,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "ANGELINA",
+      "id": 3,
+      "registered_voters": 56330,
+      "in_person_votes_on_date": 2,
+      "total_in_person_votes_for_election": 13344,
+      "total_mail_votes_for_election": 805,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "ARANSAS",
+      "id": 4,
+      "registered_voters": 19867,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 5493,
+      "total_mail_votes_for_election": 506,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "ARCHER",
+      "id": 5,
+      "registered_voters": 7093,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1612,
+      "total_mail_votes_for_election": 98,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "ARMSTRONG",
+      "id": 6,
+      "registered_voters": 1436,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 356,
+      "total_mail_votes_for_election": 35,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "ATASCOSA",
+      "id": 7,
+      "registered_voters": 32925,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 6740,
+      "total_mail_votes_for_election": 282,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "AUSTIN",
+      "id": 8,
+      "registered_voters": 22824,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 5857,
+      "total_mail_votes_for_election": 317,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BAILEY",
+      "id": 9,
+      "registered_voters": 3239,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 508,
+      "total_mail_votes_for_election": 39,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BANDERA",
+      "id": 10,
+      "registered_voters": 19330,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 5671,
+      "total_mail_votes_for_election": 312,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BASTROP",
+      "id": 11,
+      "registered_voters": 65427,
+      "in_person_votes_on_date": 5,
+      "total_in_person_votes_for_election": 18428,
+      "total_mail_votes_for_election": 1058,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BAYLOR",
+      "id": 12,
+      "registered_voters": 2387,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 536,
+      "total_mail_votes_for_election": 22,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BEE",
+      "id": 13,
+      "registered_voters": 15758,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 3657,
+      "total_mail_votes_for_election": 234,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BELL",
+      "id": 14,
+      "registered_voters": 246817,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 53028,
+      "total_mail_votes_for_election": 2821,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BEXAR",
+      "id": 15,
+      "registered_voters": 1325780,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 326762,
+      "total_mail_votes_for_election": 20708,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BLANCO",
+      "id": 16,
+      "registered_voters": 11369,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 4199,
+      "total_mail_votes_for_election": 172,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BORDEN",
+      "id": 17,
+      "registered_voters": 477,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 118,
+      "total_mail_votes_for_election": 5,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BOSQUE",
+      "id": 18,
+      "registered_voters": 13761,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 3127,
+      "total_mail_votes_for_election": 151,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BOWIE",
+      "id": 19,
+      "registered_voters": 61596,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 12312,
+      "total_mail_votes_for_election": 914,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BRAZORIA",
+      "id": 20,
+      "registered_voters": 261323,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 78439,
+      "total_mail_votes_for_election": 2812,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BRAZOS",
+      "id": 21,
+      "registered_voters": 147077,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 34913,
+      "total_mail_votes_for_election": 118,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BREWSTER",
+      "id": 22,
+      "registered_voters": 7119,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1854,
+      "total_mail_votes_for_election": 119,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BRISCOE",
+      "id": 23,
+      "registered_voters": 1022,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 216,
+      "total_mail_votes_for_election": 35,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BROOKS",
+      "id": 24,
+      "registered_voters": 4735,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 805,
+      "total_mail_votes_for_election": 80,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BROWN",
+      "id": 25,
+      "registered_voters": 25916,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 5641,
+      "total_mail_votes_for_election": 467,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BURLESON",
+      "id": 26,
+      "registered_voters": 14321,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 3245,
+      "total_mail_votes_for_election": 282,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "BURNET",
+      "id": 27,
+      "registered_voters": 39466,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 12569,
+      "total_mail_votes_for_election": 805,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CALDWELL",
+      "id": 28,
+      "registered_voters": 28491,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 7578,
+      "total_mail_votes_for_election": 302,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CALHOUN",
+      "id": 29,
+      "registered_voters": 13031,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 2791,
+      "total_mail_votes_for_election": 149,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CALLAHAN",
+      "id": 30,
+      "registered_voters": 10636,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 2328,
+      "total_mail_votes_for_election": 124,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CAMERON",
+      "id": 31,
+      "registered_voters": 244070,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 52162,
+      "total_mail_votes_for_election": 1802,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CAMP",
+      "id": 32,
+      "registered_voters": 8510,
+      "in_person_votes_on_date": 209,
+      "total_in_person_votes_for_election": 2263,
+      "total_mail_votes_for_election": 160,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CARSON",
+      "id": 33,
+      "registered_voters": 4253,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 777,
+      "total_mail_votes_for_election": 2,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CASS",
+      "id": 34,
+      "registered_voters": 21881,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 4954,
+      "total_mail_votes_for_election": 402,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CASTRO",
+      "id": 35,
+      "registered_voters": 3467,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 465,
+      "total_mail_votes_for_election": 0,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CHAMBERS",
+      "id": 36,
+      "registered_voters": 39119,
+      "in_person_votes_on_date": 1,
+      "total_in_person_votes_for_election": 9809,
+      "total_mail_votes_for_election": 166,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CHEROKEE",
+      "id": 37,
+      "registered_voters": 32796,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 7571,
+      "total_mail_votes_for_election": 388,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CHILDRESS",
+      "id": 38,
+      "registered_voters": 3580,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 914,
+      "total_mail_votes_for_election": 3,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CLAY",
+      "id": 39,
+      "registered_voters": 8340,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1689,
+      "total_mail_votes_for_election": 83,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "COCHRAN",
+      "id": 40,
+      "registered_voters": 1486,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 256,
+      "total_mail_votes_for_election": 36,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "COKE",
+      "id": 41,
+      "registered_voters": 2532,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 562,
+      "total_mail_votes_for_election": 72,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "COLEMAN",
+      "id": 42,
+      "registered_voters": 6144,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1741,
+      "total_mail_votes_for_election": 111,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "COLLIN",
+      "id": 43,
+      "registered_voters": 788729,
+      "in_person_votes_on_date": 1768,
+      "total_in_person_votes_for_election": 245246,
+      "total_mail_votes_for_election": 6236,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "COLLINGSWORTH",
+      "id": 44,
+      "registered_voters": 1857,
+      "in_person_votes_on_date": 48,
+      "total_in_person_votes_for_election": 426,
+      "total_mail_votes_for_election": 33,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "COLORADO",
+      "id": 45,
+      "registered_voters": 14766,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 4111,
+      "total_mail_votes_for_election": 258,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "COMAL",
+      "id": 46,
+      "registered_voters": 151987,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 43301,
+      "total_mail_votes_for_election": 2477,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "COMANCHE",
+      "id": 47,
+      "registered_voters": 10336,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 2277,
+      "total_mail_votes_for_election": 76,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CONCHO",
+      "id": 48,
+      "registered_voters": 1814,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 307,
+      "total_mail_votes_for_election": 55,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "COOKE",
+      "id": 49,
+      "registered_voters": 31222,
+      "in_person_votes_on_date": 5,
+      "total_in_person_votes_for_election": 6851,
+      "total_mail_votes_for_election": 405,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CORYELL",
+      "id": 50,
+      "registered_voters": 47037,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 9523,
+      "total_mail_votes_for_election": 490,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "COTTLE",
+      "id": 51,
+      "registered_voters": 979,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 273,
+      "total_mail_votes_for_election": 9,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CRANE",
+      "id": 52,
+      "registered_voters": 2756,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 421,
+      "total_mail_votes_for_election": 19,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CROCKETT",
+      "id": 53,
+      "registered_voters": 2259,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 419,
+      "total_mail_votes_for_election": 18,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CROSBY",
+      "id": 54,
+      "registered_voters": 3557,
+      "in_person_votes_on_date": 51,
+      "total_in_person_votes_for_election": 505,
+      "total_mail_votes_for_election": 83,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "CULBERSON",
+      "id": 55,
+      "registered_voters": 1732,
+      "in_person_votes_on_date": 30,
+      "total_in_person_votes_for_election": 555,
+      "total_mail_votes_for_election": 0,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "DALLAM",
+      "id": 56,
+      "registered_voters": 2836,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 306,
+      "total_mail_votes_for_election": 53,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "DALLAS",
+      "id": 57,
+      "registered_voters": 1493955,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 402674,
+      "total_mail_votes_for_election": 14546,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "DAWSON",
+      "id": 58,
+      "registered_voters": 6481,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1037,
+      "total_mail_votes_for_election": 68,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "DEAF SMITH",
+      "id": 59,
+      "registered_voters": 8821,
+      "in_person_votes_on_date": 1,
+      "total_in_person_votes_for_election": 1410,
+      "total_mail_votes_for_election": 120,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "DELTA",
+      "id": 60,
+      "registered_voters": 4116,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 792,
+      "total_mail_votes_for_election": 77,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "DENTON",
+      "id": 61,
+      "registered_voters": 688032,
+      "in_person_votes_on_date": 3,
+      "total_in_person_votes_for_election": 215866,
+      "total_mail_votes_for_election": 5958,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "DEWITT",
+      "id": 62,
+      "registered_voters": 11657,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 2804,
+      "total_mail_votes_for_election": 165,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "DICKENS",
+      "id": 63,
+      "registered_voters": 1363,
+      "in_person_votes_on_date": 31,
+      "total_in_person_votes_for_election": 282,
+      "total_mail_votes_for_election": 30,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "DIMMIT",
+      "id": 64,
+      "registered_voters": 6567,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1122,
+      "total_mail_votes_for_election": 91,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "DONLEY",
+      "id": 65,
+      "registered_voters": 2463,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 518,
+      "total_mail_votes_for_election": 37,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "DUVAL",
+      "id": 66,
+      "registered_voters": 7777,
+      "in_person_votes_on_date": 141,
+      "total_in_person_votes_for_election": 1685,
+      "total_mail_votes_for_election": 319,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "EASTLAND",
+      "id": 67,
+      "registered_voters": 12664,
+      "in_person_votes_on_date": 1,
+      "total_in_person_votes_for_election": 2457,
+      "total_mail_votes_for_election": 128,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "ECTOR",
+      "id": 68,
+      "registered_voters": 84739,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 12318,
+      "total_mail_votes_for_election": 2,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "EDWARDS",
+      "id": 69,
+      "registered_voters": 1488,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 401,
+      "total_mail_votes_for_election": 11,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "ELLIS",
+      "id": 70,
+      "registered_voters": 159133,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 46240,
+      "total_mail_votes_for_election": 1305,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "EL PASO",
+      "id": 71,
+      "registered_voters": 530978,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 99960,
+      "total_mail_votes_for_election": 6499,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "ERATH",
+      "id": 72,
+      "registered_voters": 26965,
+      "in_person_votes_on_date": 8,
+      "total_in_person_votes_for_election": 6513,
+      "total_mail_votes_for_election": 286,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "FALLS",
+      "id": 73,
+      "registered_voters": 10771,
+      "in_person_votes_on_date": 156,
+      "total_in_person_votes_for_election": 1722,
+      "total_mail_votes_for_election": 10,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "FANNIN",
+      "id": 74,
+      "registered_voters": 24550,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 6218,
+      "total_mail_votes_for_election": 395,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "FAYETTE",
+      "id": 75,
+      "registered_voters": 18401,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 4487,
+      "total_mail_votes_for_election": 430,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "FISHER",
+      "id": 76,
+      "registered_voters": 2739,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 448,
+      "total_mail_votes_for_election": 62,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "FLOYD",
+      "id": 77,
+      "registered_voters": 3582,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 676,
+      "total_mail_votes_for_election": 0,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "FOARD",
+      "id": 78,
+      "registered_voters": 779,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 164,
+      "total_mail_votes_for_election": 10,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "FORT BEND",
+      "id": 79,
+      "registered_voters": 581636,
+      "in_person_votes_on_date": 2105,
+      "total_in_person_votes_for_election": 180674,
+      "total_mail_votes_for_election": 4578,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "FRANKLIN",
+      "id": 80,
+      "registered_voters": 7801,
+      "in_person_votes_on_date": 1,
+      "total_in_person_votes_for_election": 1892,
+      "total_mail_votes_for_election": 98,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "FREESTONE",
+      "id": 81,
+      "registered_voters": 13538,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 3041,
+      "total_mail_votes_for_election": 114,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "FRIO",
+      "id": 82,
+      "registered_voters": 9650,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1306,
+      "total_mail_votes_for_election": 102,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "GAINES",
+      "id": 83,
+      "registered_voters": 10888,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1821,
+      "total_mail_votes_for_election": 41,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "GALVESTON",
+      "id": 84,
+      "registered_voters": 251059,
+      "in_person_votes_on_date": 1,
+      "total_in_person_votes_for_election": 72914,
+      "total_mail_votes_for_election": 2807,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "GARZA",
+      "id": 85,
+      "registered_voters": 2528,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 416,
+      "total_mail_votes_for_election": 40,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "GILLESPIE",
+      "id": 86,
+      "registered_voters": 22570,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 7099,
+      "total_mail_votes_for_election": 537,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "GLASSCOCK",
+      "id": 87,
+      "registered_voters": 857,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 229,
+      "total_mail_votes_for_election": 11,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "GOLIAD",
+      "id": 88,
+      "registered_voters": 5747,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1547,
+      "total_mail_votes_for_election": 108,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "GONZALES",
+      "id": 89,
+      "registered_voters": 13364,
+      "in_person_votes_on_date": 3,
+      "total_in_person_votes_for_election": 3534,
+      "total_mail_votes_for_election": 191,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "GRAY",
+      "id": 90,
+      "registered_voters": 12303,
+      "in_person_votes_on_date": 1,
+      "total_in_person_votes_for_election": 2389,
+      "total_mail_votes_for_election": 193,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "GRAYSON",
+      "id": 91,
+      "registered_voters": 104013,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 27363,
+      "total_mail_votes_for_election": 1317,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "GREGG",
+      "id": 92,
+      "registered_voters": 74495,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 16098,
+      "total_mail_votes_for_election": 1318,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "GRIMES",
+      "id": 93,
+      "registered_voters": 22206,
+      "in_person_votes_on_date": 5,
+      "total_in_person_votes_for_election": 4281,
+      "total_mail_votes_for_election": 263,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "GUADALUPE",
+      "id": 94,
+      "registered_voters": 138088,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 33938,
+      "total_mail_votes_for_election": 926,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HALE",
+      "id": 95,
+      "registered_voters": 18374,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 3212,
+      "total_mail_votes_for_election": 104,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HALL",
+      "id": 96,
+      "registered_voters": 1831,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 242,
+      "total_mail_votes_for_election": 16,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HAMILTON",
+      "id": 97,
+      "registered_voters": 6348,
+      "in_person_votes_on_date": 152,
+      "total_in_person_votes_for_election": 1691,
+      "total_mail_votes_for_election": 99,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HANSFORD",
+      "id": 98,
+      "registered_voters": 2977,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 485,
+      "total_mail_votes_for_election": 62,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HARDEMAN",
+      "id": 99,
+      "registered_voters": 2191,
+      "in_person_votes_on_date": 26,
+      "total_in_person_votes_for_election": 376,
+      "total_mail_votes_for_election": 22,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HARDIN",
+      "id": 100,
+      "registered_voters": 43968,
+      "in_person_votes_on_date": 2,
+      "total_in_person_votes_for_election": 9751,
+      "total_mail_votes_for_election": 249,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HARRIS",
+      "id": 101,
+      "registered_voters": 2746177,
+      "in_person_votes_on_date": 5578,
+      "total_in_person_votes_for_election": 634593,
+      "total_mail_votes_for_election": 35335,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HARRISON",
+      "id": 102,
+      "registered_voters": 47906,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 12506,
+      "total_mail_votes_for_election": 532,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HARTLEY",
+      "id": 103,
+      "registered_voters": 2821,
+      "in_person_votes_on_date": 1,
+      "total_in_person_votes_for_election": 584,
+      "total_mail_votes_for_election": 38,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HASKELL",
+      "id": 104,
+      "registered_voters": 3445,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 582,
+      "total_mail_votes_for_election": 42,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HAYS",
+      "id": 105,
+      "registered_voters": 203490,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 64753,
+      "total_mail_votes_for_election": 1266,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HEMPHILL",
+      "id": 106,
+      "registered_voters": 2290,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 428,
+      "total_mail_votes_for_election": 42,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HENDERSON",
+      "id": 107,
+      "registered_voters": 61329,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 15616,
+      "total_mail_votes_for_election": 306,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HIDALGO",
+      "id": 108,
+      "registered_voters": 466208,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 109293,
+      "total_mail_votes_for_election": 3802,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HILL",
+      "id": 109,
+      "registered_voters": 27866,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 5069,
+      "total_mail_votes_for_election": 277,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HOCKLEY",
+      "id": 110,
+      "registered_voters": 14373,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 2680,
+      "total_mail_votes_for_election": 135,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HOOD",
+      "id": 111,
+      "registered_voters": 54192,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 13138,
+      "total_mail_votes_for_election": 19,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HOPKINS",
+      "id": 112,
+      "registered_voters": 25858,
+      "in_person_votes_on_date": 4,
+      "total_in_person_votes_for_election": 6094,
+      "total_mail_votes_for_election": 368,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HOUSTON",
+      "id": 113,
+      "registered_voters": 13919,
+      "in_person_votes_on_date": 1,
+      "total_in_person_votes_for_election": 3092,
+      "total_mail_votes_for_election": 298,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HOWARD",
+      "id": 114,
+      "registered_voters": 16861,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 3435,
+      "total_mail_votes_for_election": 163,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HUDSPETH",
+      "id": 115,
+      "registered_voters": 2103,
+      "in_person_votes_on_date": 25,
+      "total_in_person_votes_for_election": 151,
+      "total_mail_votes_for_election": 19,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HUNT",
+      "id": 116,
+      "registered_voters": 77012,
+      "in_person_votes_on_date": 14,
+      "total_in_person_votes_for_election": 14488,
+      "total_mail_votes_for_election": 832,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "HUTCHINSON",
+      "id": 117,
+      "registered_voters": 13404,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 2789,
+      "total_mail_votes_for_election": 178,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "IRION",
+      "id": 118,
+      "registered_voters": 1221,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 252,
+      "total_mail_votes_for_election": 13,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "JACK",
+      "id": 119,
+      "registered_voters": 5967,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1629,
+      "total_mail_votes_for_election": 99,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "JACKSON",
+      "id": 120,
+      "registered_voters": 10054,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1881,
+      "total_mail_votes_for_election": 89,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "JASPER",
+      "id": 121,
+      "registered_voters": 24585,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 6267,
+      "total_mail_votes_for_election": 192,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "JEFF DAVIS",
+      "id": 122,
+      "registered_voters": 1539,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 571,
+      "total_mail_votes_for_election": 18,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "JEFFERSON",
+      "id": 123,
+      "registered_voters": 148754,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 39480,
+      "total_mail_votes_for_election": 1956,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "JIM HOGG",
+      "id": 124,
+      "registered_voters": 3405,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 521,
+      "total_mail_votes_for_election": 133,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "JIM WELLS",
+      "id": 125,
+      "registered_voters": 26107,
+      "in_person_votes_on_date": 2,
+      "total_in_person_votes_for_election": 5168,
+      "total_mail_votes_for_election": 1,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "JOHNSON",
+      "id": 126,
+      "registered_voters": 135277,
+      "in_person_votes_on_date": 153,
+      "total_in_person_votes_for_election": 36195,
+      "total_mail_votes_for_election": 279,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "JONES",
+      "id": 127,
+      "registered_voters": 11231,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1520,
+      "total_mail_votes_for_election": 180,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "KARNES",
+      "id": 128,
+      "registered_voters": 8281,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1357,
+      "total_mail_votes_for_election": 155,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "KAUFMAN",
+      "id": 129,
+      "registered_voters": 119211,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 29953,
+      "total_mail_votes_for_election": 882,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "KENDALL",
+      "id": 130,
+      "registered_voters": 41174,
+      "in_person_votes_on_date": 15,
+      "total_in_person_votes_for_election": 13062,
+      "total_mail_votes_for_election": 843,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "KENEDY",
+      "id": 131,
+      "registered_voters": 269,
+      "in_person_votes_on_date": 5,
+      "total_in_person_votes_for_election": 106,
+      "total_mail_votes_for_election": 5,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "KENT",
+      "id": 132,
+      "registered_voters": 566,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 116,
+      "total_mail_votes_for_election": 1,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "KERR",
+      "id": 133,
+      "registered_voters": 39762,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 12747,
+      "total_mail_votes_for_election": 1074,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "KIMBLE",
+      "id": 134,
+      "registered_voters": 3353,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 846,
+      "total_mail_votes_for_election": 45,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "KING",
+      "id": 135,
+      "registered_voters": 179,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 36,
+      "total_mail_votes_for_election": 1,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "KINNEY",
+      "id": 136,
+      "registered_voters": 2195,
+      "in_person_votes_on_date": 1,
+      "total_in_person_votes_for_election": 797,
+      "total_mail_votes_for_election": 26,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "KLEBERG",
+      "id": 137,
+      "registered_voters": 18028,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 4123,
+      "total_mail_votes_for_election": 195,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "KNOX",
+      "id": 138,
+      "registered_voters": 2262,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 204,
+      "total_mail_votes_for_election": 28,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "LAMAR",
+      "id": 139,
+      "registered_voters": 33431,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 8063,
+      "total_mail_votes_for_election": 14,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "LAMB",
+      "id": 140,
+      "registered_voters": 7668,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 945,
+      "total_mail_votes_for_election": 130,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "LAMPASAS",
+      "id": 141,
+      "registered_voters": 17556,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 4607,
+      "total_mail_votes_for_election": 181,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "LASALLE",
+      "id": 142,
+      "registered_voters": 4096,
+      "in_person_votes_on_date": 50,
+      "total_in_person_votes_for_election": 838,
+      "total_mail_votes_for_election": 88,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "LAVACA",
+      "id": 143,
+      "registered_voters": 14463,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 3330,
+      "total_mail_votes_for_election": 349,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "LEE",
+      "id": 144,
+      "registered_voters": 12262,
+      "in_person_votes_on_date": 3,
+      "total_in_person_votes_for_election": 3189,
+      "total_mail_votes_for_election": 177,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "LEON",
+      "id": 145,
+      "registered_voters": 12449,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 2660,
+      "total_mail_votes_for_election": 80,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "LIBERTY",
+      "id": 146,
+      "registered_voters": 59345,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 12263,
+      "total_mail_votes_for_election": 413,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "LIMESTONE",
+      "id": 147,
+      "registered_voters": 14484,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 3184,
+      "total_mail_votes_for_election": 228,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "LIPSCOMB",
+      "id": 148,
+      "registered_voters": 1878,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 162,
+      "total_mail_votes_for_election": 23,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "LIVE OAK",
+      "id": 149,
+      "registered_voters": 7686,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1549,
+      "total_mail_votes_for_election": 90,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "LLANO",
+      "id": 150,
+      "registered_voters": 18564,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 6859,
+      "total_mail_votes_for_election": 537,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "LOVING",
+      "id": 151,
+      "registered_voters": 148,
+      "in_person_votes_on_date": 3,
+      "total_in_person_votes_for_election": 30,
+      "total_mail_votes_for_election": 1,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "LUBBOCK",
+      "id": 152,
+      "registered_voters": 204340,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 52644,
+      "total_mail_votes_for_election": 1787,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "LYNN",
+      "id": 153,
+      "registered_voters": 4475,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 587,
+      "total_mail_votes_for_election": 33,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MADISON",
+      "id": 154,
+      "registered_voters": 8576,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1803,
+      "total_mail_votes_for_election": 90,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MARION",
+      "id": 155,
+      "registered_voters": 7878,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1795,
+      "total_mail_votes_for_election": 158,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MARTIN",
+      "id": 156,
+      "registered_voters": 3589,
+      "in_person_votes_on_date": 75,
+      "total_in_person_votes_for_election": 615,
+      "total_mail_votes_for_election": 13,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MASON",
+      "id": 157,
+      "registered_voters": 3320,
+      "in_person_votes_on_date": 10,
+      "total_in_person_votes_for_election": 1161,
+      "total_mail_votes_for_election": 53,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MATAGORDA",
+      "id": 158,
+      "registered_voters": 22526,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 5410,
+      "total_mail_votes_for_election": 235,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MAVERICK",
+      "id": 159,
+      "registered_voters": 37239,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 5988,
+      "total_mail_votes_for_election": 155,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MCCULLOCH",
+      "id": 160,
+      "registered_voters": 5380,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1141,
+      "total_mail_votes_for_election": 81,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MCLENNAN",
+      "id": 161,
+      "registered_voters": 161164,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 35977,
+      "total_mail_votes_for_election": 2513,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MCMULLEN",
+      "id": 162,
+      "registered_voters": 644,
+      "in_person_votes_on_date": 16,
+      "total_in_person_votes_for_election": 192,
+      "total_mail_votes_for_election": 2,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MEDINA",
+      "id": 163,
+      "registered_voters": 40743,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 9318,
+      "total_mail_votes_for_election": 480,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MENARD",
+      "id": 164,
+      "registered_voters": 1474,
+      "in_person_votes_on_date": 50,
+      "total_in_person_votes_for_election": 419,
+      "total_mail_votes_for_election": 24,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MIDLAND",
+      "id": 165,
+      "registered_voters": 99805,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 19906,
+      "total_mail_votes_for_election": 540,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MILAM",
+      "id": 166,
+      "registered_voters": 17565,
+      "in_person_votes_on_date": 2,
+      "total_in_person_votes_for_election": 4307,
+      "total_mail_votes_for_election": 103,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MILLS",
+      "id": 167,
+      "registered_voters": 3643,
+      "in_person_votes_on_date": 80,
+      "total_in_person_votes_for_election": 1103,
+      "total_mail_votes_for_election": 72,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MITCHELL",
+      "id": 168,
+      "registered_voters": 4473,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 799,
+      "total_mail_votes_for_election": 30,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MONTAGUE",
+      "id": 169,
+      "registered_voters": 15801,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 4081,
+      "total_mail_votes_for_election": 187,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MONTGOMERY",
+      "id": 170,
+      "registered_voters": 487323,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 113242,
+      "total_mail_votes_for_election": 7394,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MOORE",
+      "id": 171,
+      "registered_voters": 10247,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1741,
+      "total_mail_votes_for_election": 89,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MORRIS",
+      "id": 172,
+      "registered_voters": 8815,
+      "in_person_votes_on_date": 1,
+      "total_in_person_votes_for_election": 1802,
+      "total_mail_votes_for_election": 115,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "MOTLEY",
+      "id": 173,
+      "registered_voters": 829,
+      "in_person_votes_on_date": 20,
+      "total_in_person_votes_for_election": 191,
+      "total_mail_votes_for_election": 23,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "NACOGDOCHES",
+      "id": 174,
+      "registered_voters": 40402,
+      "in_person_votes_on_date": 16,
+      "total_in_person_votes_for_election": 10362,
+      "total_mail_votes_for_election": 654,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "NAVARRO",
+      "id": 175,
+      "registered_voters": 33825,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 6910,
+      "total_mail_votes_for_election": 198,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "NEWTON",
+      "id": 176,
+      "registered_voters": 9424,
+      "in_person_votes_on_date": 142,
+      "total_in_person_votes_for_election": 1589,
+      "total_mail_votes_for_election": 67,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "NOLAN",
+      "id": 177,
+      "registered_voters": 8835,
+      "in_person_votes_on_date": 1,
+      "total_in_person_votes_for_election": 1341,
+      "total_mail_votes_for_election": 104,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "NUECES",
+      "id": 178,
+      "registered_voters": 217666,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 45332,
+      "total_mail_votes_for_election": 4134,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "OCHILTREE",
+      "id": 179,
+      "registered_voters": 5221,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 802,
+      "total_mail_votes_for_election": 70,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "OLDHAM",
+      "id": 180,
+      "registered_voters": 1395,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 223,
+      "total_mail_votes_for_election": 21,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "ORANGE",
+      "id": 181,
+      "registered_voters": 56955,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 13075,
+      "total_mail_votes_for_election": 628,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "PALO PINTO",
+      "id": 182,
+      "registered_voters": 20923,
+      "in_person_votes_on_date": 4,
+      "total_in_person_votes_for_election": 4619,
+      "total_mail_votes_for_election": 332,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "PANOLA",
+      "id": 183,
+      "registered_voters": 17896,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 3331,
+      "total_mail_votes_for_election": 200,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "PARKER",
+      "id": 184,
+      "registered_voters": 133925,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 37976,
+      "total_mail_votes_for_election": 1725,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "PARMER",
+      "id": 185,
+      "registered_voters": 4516,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 423,
+      "total_mail_votes_for_election": 43,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "PECOS",
+      "id": 186,
+      "registered_voters": 8431,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1616,
+      "total_mail_votes_for_election": 84,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "POLK",
+      "id": 187,
+      "registered_voters": 44574,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 7845,
+      "total_mail_votes_for_election": 1521,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "POTTER",
+      "id": 188,
+      "registered_voters": 59103,
+      "in_person_votes_on_date": 9,
+      "total_in_person_votes_for_election": 11860,
+      "total_mail_votes_for_election": 952,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "PRESIDIO",
+      "id": 189,
+      "registered_voters": 4373,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 965,
+      "total_mail_votes_for_election": 41,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "RAINS",
+      "id": 190,
+      "registered_voters": 9772,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 2420,
+      "total_mail_votes_for_election": 2,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "RANDALL",
+      "id": 191,
+      "registered_voters": 102715,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 26273,
+      "total_mail_votes_for_election": 1989,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "REAGAN",
+      "id": 192,
+      "registered_voters": 1808,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 296,
+      "total_mail_votes_for_election": 10,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "REAL",
+      "id": 193,
+      "registered_voters": 2701,
+      "in_person_votes_on_date": 47,
+      "total_in_person_votes_for_election": 745,
+      "total_mail_votes_for_election": 41,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "RED RIVER",
+      "id": 194,
+      "registered_voters": 8664,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 2022,
+      "total_mail_votes_for_election": 59,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "REEVES",
+      "id": 195,
+      "registered_voters": 8030,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1808,
+      "total_mail_votes_for_election": 122,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "REFUGIO",
+      "id": 196,
+      "registered_voters": 4922,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1034,
+      "total_mail_votes_for_election": 68,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "ROBERTS",
+      "id": 197,
+      "registered_voters": 713,
+      "in_person_votes_on_date": 14,
+      "total_in_person_votes_for_election": 183,
+      "total_mail_votes_for_election": 10,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "ROBERTSON",
+      "id": 198,
+      "registered_voters": 12971,
+      "in_person_votes_on_date": 1,
+      "total_in_person_votes_for_election": 3537,
+      "total_mail_votes_for_election": 186,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "ROCKWALL",
+      "id": 199,
+      "registered_voters": 91659,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 28068,
+      "total_mail_votes_for_election": 431,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "RUNNELS",
+      "id": 200,
+      "registered_voters": 6848,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1214,
+      "total_mail_votes_for_election": 70,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "RUSK",
+      "id": 201,
+      "registered_voters": 34488,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 6913,
+      "total_mail_votes_for_election": 12,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "SABINE",
+      "id": 202,
+      "registered_voters": 8393,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 2113,
+      "total_mail_votes_for_election": 120,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "SAN AUGUSTINE",
+      "id": 203,
+      "registered_voters": 6045,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1434,
+      "total_mail_votes_for_election": 84,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "SAN JACINTO",
+      "id": 204,
+      "registered_voters": 21104,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 4600,
+      "total_mail_votes_for_election": 303,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "SAN PATRICIO",
+      "id": 205,
+      "registered_voters": 45611,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 7910,
+      "total_mail_votes_for_election": 378,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "SAN SABA",
+      "id": 206,
+      "registered_voters": 3774,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 956,
+      "total_mail_votes_for_election": 66,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "SCHLEICHER",
+      "id": 207,
+      "registered_voters": 1779,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 444,
+      "total_mail_votes_for_election": 27,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "SCURRY",
+      "id": 208,
+      "registered_voters": 9254,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1740,
+      "total_mail_votes_for_election": 79,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "SHACKELFORD",
+      "id": 209,
+      "registered_voters": 2467,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 549,
+      "total_mail_votes_for_election": 52,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "SHELBY",
+      "id": 210,
+      "registered_voters": 16476,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 3015,
+      "total_mail_votes_for_election": 169,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "SHERMAN",
+      "id": 211,
+      "registered_voters": 1366,
+      "in_person_votes_on_date": 10,
+      "total_in_person_votes_for_election": 278,
+      "total_mail_votes_for_election": 15,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "SMITH",
+      "id": 212,
+      "registered_voters": 164156,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 43444,
+      "total_mail_votes_for_election": 2389,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "SOMERVELL",
+      "id": 213,
+      "registered_voters": 7577,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 2153,
+      "total_mail_votes_for_election": 62,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "STARR",
+      "id": 214,
+      "registered_voters": 36485,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 6137,
+      "total_mail_votes_for_election": 97,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "STEPHENS",
+      "id": 215,
+      "registered_voters": 5908,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1295,
+      "total_mail_votes_for_election": 106,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "STERLING",
+      "id": 216,
+      "registered_voters": 902,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 170,
+      "total_mail_votes_for_election": 12,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "STONEWALL",
+      "id": 217,
+      "registered_voters": 960,
+      "in_person_votes_on_date": 22,
+      "total_in_person_votes_for_election": 226,
+      "total_mail_votes_for_election": 8,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "SUTTON",
+      "id": 218,
+      "registered_voters": 2284,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 582,
+      "total_mail_votes_for_election": 14,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "SWISHER",
+      "id": 219,
+      "registered_voters": 3882,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 623,
+      "total_mail_votes_for_election": 80,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "TARRANT",
+      "id": 220,
+      "registered_voters": 1228367,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 370916,
+      "total_mail_votes_for_election": 16260,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "TAYLOR",
+      "id": 221,
+      "registered_voters": 90886,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 20460,
+      "total_mail_votes_for_election": 1180,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "TERRELL",
+      "id": 222,
+      "registered_voters": 622,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 147,
+      "total_mail_votes_for_election": 11,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "TERRY",
+      "id": 223,
+      "registered_voters": 6202,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1139,
+      "total_mail_votes_for_election": 58,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "THROCKMORTON",
+      "id": 224,
+      "registered_voters": 1192,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 155,
+      "total_mail_votes_for_election": 8,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "TITUS",
+      "id": 225,
+      "registered_voters": 18307,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 4412,
+      "total_mail_votes_for_election": 192,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "TOM GREEN",
+      "id": 226,
+      "registered_voters": 73870,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 17081,
+      "total_mail_votes_for_election": 1525,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "TRAVIS",
+      "id": 227,
+      "registered_voters": 945505,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 285241,
+      "total_mail_votes_for_election": 13736,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "TRINITY",
+      "id": 228,
+      "registered_voters": 12380,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 2942,
+      "total_mail_votes_for_election": 16,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "TYLER",
+      "id": 229,
+      "registered_voters": 14992,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 2743,
+      "total_mail_votes_for_election": 146,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "UPSHUR",
+      "id": 230,
+      "registered_voters": 31152,
+      "in_person_votes_on_date": 3,
+      "total_in_person_votes_for_election": 6773,
+      "total_mail_votes_for_election": 462,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "UPTON",
+      "id": 231,
+      "registered_voters": 2079,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 418,
+      "total_mail_votes_for_election": 4,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "UVALDE",
+      "id": 232,
+      "registered_voters": 17679,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 4188,
+      "total_mail_votes_for_election": 224,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "VAL VERDE",
+      "id": 233,
+      "registered_voters": 31026,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 6419,
+      "total_mail_votes_for_election": 347,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "VAN ZANDT",
+      "id": 234,
+      "registered_voters": 43058,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 9055,
+      "total_mail_votes_for_election": 507,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "VICTORIA",
+      "id": 235,
+      "registered_voters": 58190,
+      "in_person_votes_on_date": 8,
+      "total_in_person_votes_for_election": 11800,
+      "total_mail_votes_for_election": 1422,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "WALKER",
+      "id": 236,
+      "registered_voters": 40280,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 10740,
+      "total_mail_votes_for_election": 377,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "WALLER",
+      "id": 237,
+      "registered_voters": 46110,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 9515,
+      "total_mail_votes_for_election": 244,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "WARD",
+      "id": 238,
+      "registered_voters": 7027,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1039,
+      "total_mail_votes_for_election": 57,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "WASHINGTON",
+      "id": 239,
+      "registered_voters": 26247,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 5058,
+      "total_mail_votes_for_election": 349,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "WEBB",
+      "id": 240,
+      "registered_voters": 150324,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 25590,
+      "total_mail_votes_for_election": 558,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "WHARTON",
+      "id": 241,
+      "registered_voters": 26520,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 6502,
+      "total_mail_votes_for_election": 282,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "WHEELER",
+      "id": 242,
+      "registered_voters": 3347,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 759,
+      "total_mail_votes_for_election": 52,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "WICHITA",
+      "id": 243,
+      "registered_voters": 78749,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 16982,
+      "total_mail_votes_for_election": 1215,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "WILBARGER",
+      "id": 244,
+      "registered_voters": 8256,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1707,
+      "total_mail_votes_for_election": 171,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "WILLACY",
+      "id": 245,
+      "registered_voters": 11578,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1996,
+      "total_mail_votes_for_election": 54,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "WILLIAMSON",
+      "id": 246,
+      "registered_voters": 472191,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 152975,
+      "total_mail_votes_for_election": 6617,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "WILSON",
+      "id": 247,
+      "registered_voters": 40405,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 11193,
+      "total_mail_votes_for_election": 662,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "WINKLER",
+      "id": 248,
+      "registered_voters": 4190,
+      "in_person_votes_on_date": 35,
+      "total_in_person_votes_for_election": 237,
+      "total_mail_votes_for_election": 35,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "WISE",
+      "id": 249,
+      "registered_voters": 59841,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 16556,
+      "total_mail_votes_for_election": 648,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "WOOD",
+      "id": 250,
+      "registered_voters": 36213,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 9025,
+      "total_mail_votes_for_election": 314,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "YOAKUM",
+      "id": 251,
+      "registered_voters": 4340,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 710,
+      "total_mail_votes_for_election": 28,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "YOUNG",
+      "id": 252,
+      "registered_voters": 12892,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 3395,
+      "total_mail_votes_for_election": 1,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "ZAPATA",
+      "id": 253,
+      "registered_voters": 8263,
+      "in_person_votes_on_date": 0,
+      "total_in_person_votes_for_election": 1383,
+      "total_mail_votes_for_election": 31,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    },
+    {
+      "name": "ZAVALA",
+      "id": 254,
+      "registered_voters": 7580,
+      "in_person_votes_on_date": 1,
+      "total_in_person_votes_for_election": 1623,
+      "total_mail_votes_for_election": 10,
+      "voter_details_report": "EarlyVotingTurnoutByDate/2026-10-27/EVR_EarlyVotingByDate"
+    }
+  ]
+}

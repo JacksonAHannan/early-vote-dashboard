@@ -140,7 +140,7 @@ function comparisonIssues(counties=data.counties){
  return counties.filter(c=>county==='all'||c.id===county).flatMap(c=>{
   const p=c.periods.find(p=>p.day===day),cov=p?.coverage;
   const available=cov?.available_groups??p?.groups.filter(g=>g.available!==false).length??0;
-  if(!p||!available)return [{county:c.id,name:c.name,kind:'unavailable',reason:`No complete paired precincts for Day ${day}`}];
+  if(!p||!available)return [{county:c.id,name:c.name,kind:'unavailable',reason:`No complete paired precincts for Day ${day}${c.error&&!c.error.startsWith("No matched cumulative precinct subset")?" · "+c.error:""}`}];
   if(cov&&cov.available_precincts<cov.total_precincts)return [{county:c.id,name:c.name,kind:'partial',reason:`Day ${day}: ${number(cov.available_precincts)} / ${number(cov.total_precincts)} precincts paired`}];
   if(day===data.days&&c.status!=='current'&&c.error)return [{county:c.id,name:c.name,kind:'cached',reason:`Complete paired comparison from retained reports; latest download: ${c.error}`}];
   return [];

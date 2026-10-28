@@ -11,6 +11,7 @@ from datetime import date,datetime,timedelta,timezone
 import argparse,hashlib,json,re,sys
 from pathlib import Path
 from urllib.parse import unquote,urljoin,urlparse
+from zoneinfo import ZoneInfo
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/'dashboard/scripts'))
 from collect_county_native import download,xlsx_rows
@@ -26,7 +27,10 @@ def vote_date(value):
 
 def aggregate(rows,cutoff,source,sha256,retrieved_at):
  rows=iter(rows)
- if next(rows,None)!=HEADER:raise ValueError('Collin workbook schema changed')
+ header=next(rows,None)
+ # The county removed its empty report-layout Textbox51 column on Oct27.
+ # All eight analytical columns remain mandatory with their exact meanings.
+ if header not in [HEADER,{k:v for k,v in HEADER.items() if k!='I'}]:raise ValueError('Collin workbook schema changed')
  if not date(2026,10,19)<=cutoff<=date(2026,10,30):raise ValueError('cutoff outside reviewed election calendar')
  counts=defaultdict(Counter);identities={};quarantine=set();dates=set();ordinary=Counter();provisional=Counter();duplicates=Counter();blank=Counter()
  for r in rows:
@@ -53,7 +57,7 @@ def aggregate(rows,cutoff,source,sha256,retrieved_at):
   output.append({'county':'collin','date':str(when),'counts':dict(sorted(counts[when].items())),'complete':False,'cumulative':False,'unavailable_precincts':unavailable,'source':source,'sha256':sha256,'retrieved_at':retrieved_at,'note':f'Official Collin dated ordinary Regular early in-person residence-precinct workbook through {cutoff}; Provisional rows excluded. Raw voter identities processed only in memory, globally deduplicated; blank/conflicting identity cells withheld. {ordinary[when]} ordinary source rows; {provisional[when]} provisional rows excluded; {duplicates[when]} repeated ordinary identities; {blank[when]} blank ordinary identities. Omitted precincts are unknown; no zero inference.'})
  return output
 
-def discover(html,through):
+def discover_workbooks(html,through,strict_latest=False):
  candidates=defaultdict(set)
  for href in re.findall(r'href=["\']([^"\']+)',html,re.I):
   u=urljoin(LANDING,href.replace('&amp;','&'));p=urlparse(unquote(u))
@@ -63,13 +67,25 @@ def discover(html,through):
    cutoff=date(2026,10,int(m[1]))
    if cutoff<=through:candidates[cutoff].add(u)
  if not candidates:raise ValueError('no dated county workbook link within requested cutoff')
- cutoff=max(candidates)
- if len(candidates[cutoff])!=1:raise ValueError('ambiguous county workbook links for latest cutoff')
- return cutoff,next(iter(candidates[cutoff]))
+ if strict_latest and len(candidates[max(candidates)])!=1:raise ValueError('ambiguous county workbook links for latest cutoff')
+ return [(cutoff,next(iter(urls))) for cutoff,urls in sorted(candidates.items(),reverse=True) if len(urls)==1]
+
+def discover(html,through):
+ # Preserve the strict discovery contract for callers inspecting one edition.
+ workbooks=discover_workbooks(html,through,strict_latest=True)
+ if not workbooks:raise ValueError('ambiguous county workbook links for latest cutoff')
+ return workbooks[0]
 
 def collect(through,downloader=download):
- cutoff,url=discover(downloader(LANDING).decode(),through);raw=downloader(url)
- return aggregate(xlsx_rows(raw),cutoff,url,hashlib.sha256(raw).hexdigest(),datetime.now(timezone.utc).isoformat())
+ through=min(through,datetime.now(ZoneInfo('America/Chicago')).date()-timedelta(days=1))
+ workbooks=discover_workbooks(downloader(LANDING).decode(),through)
+ for cutoff,url in workbooks:
+  try:
+   raw=downloader(url)
+   return aggregate(xlsx_rows(raw),cutoff,url,hashlib.sha256(raw).hexdigest(),datetime.now(timezone.utc).isoformat())
+  except Exception as error:
+   print(json.dumps({'county':'collin','date':str(cutoff),'status':'unavailable','error':type(error).__name__}),file=sys.stderr)
+ raise ValueError('no usable completed Collin workbook publication')
 
 def main():
  p=argparse.ArgumentParser(description=__doc__)

@@ -109,14 +109,30 @@ def current_source_note(county, period):
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--snapshot',type=Path,default=ROOT/'dashboard/data/latest.json');parser.add_argument('--output',type=Path);parser.add_argument('--controls',type=Path,default=ROOT/'dashboard/data/completeness.json')
+    parser=argparse.ArgumentParser();parser.add_argument('--snapshot',type=Path,default=ROOT/'dashboard/data/latest.json');parser.add_argument('--output',type=Path);parser.add_argument('--controls',type=Path,default=ROOT/'dashboard/data/completeness.json');parser.add_argument('--qualification',type=Path)
     args=parser.parse_args();snapshot=json.loads(args.snapshot.read_text())
     if len(snapshot.get('completeness_sha256','')) != 64:
         raise ValueError('Snapshot lacks matched-geography qualification; rebuild with the current Rust dashboard before rendering')
-    control_bytes=args.controls.read_bytes()
-    control_hash=hashlib.sha256(json.dumps(json.loads(control_bytes),separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
-    if control_hash != snapshot['completeness_sha256']:
-        raise ValueError('Completion controls changed; rebuild or provide the frozen --controls used by this snapshot')
+    qualification=args.qualification or args.snapshot.with_suffix('.qualification.json')
+    proof_bytes=None
+    if qualification.exists():
+        # Rust freezes its exact serialized control + reviewed-recovery hash input.
+        # Do not reimplement its schema or infer that fresh controls match an old snapshot.
+        proof_bytes=qualification.read_bytes()
+        if hashlib.sha256(proof_bytes).hexdigest()!=snapshot['completeness_sha256']:
+            raise ValueError('Frozen qualification changed; use the proof generated with this snapshot')
+        proof=json.loads(proof_bytes)
+        if not isinstance(proof,list) or len(proof)!=2 or not isinstance(proof[0],dict):
+            raise ValueError('Invalid frozen qualification schema')
+        control_bytes=json.dumps(proof[0],separators=(',',':'),ensure_ascii=False).encode()
+    else:
+        if args.qualification:
+            raise ValueError('Frozen qualification is unavailable')
+        # Backwards compatibility for snapshots from before recovery qualification.
+        control_bytes=args.controls.read_bytes()
+        control_hash=hashlib.sha256(json.dumps(json.loads(control_bytes),separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
+        if control_hash != snapshot['completeness_sha256']:
+            raise ValueError('Completion controls changed; rebuild to freeze the qualification used by this snapshot')
     out=args.output or ROOT/'analysis'/f"matched-through-{snapshot['through']}";out.mkdir(parents=True,exist_ok=True)
     selected=[];periods=[];rows=[];audits=[]
     for county in snapshot['counties']:
@@ -170,6 +186,7 @@ def main():
     # Freeze the aggregate inputs to every image alongside its exports.
     (out/'snapshot.json').write_text(json.dumps(snapshot,indent=2)+'\n')
     (out/'completion-controls.json').write_bytes(control_bytes)
+    if proof_bytes is not None:(out/'qualification.json').write_bytes(proof_bytes)
     print(json.dumps({'output':str(out),'counties':len(selected),'comparison_pages':len(image_links)//2,'bucket_rows':len(rows),'groups':len(audits)}))
 
 if __name__=='__main__':main()

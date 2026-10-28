@@ -18,7 +18,7 @@ import re
 import subprocess
 import xml.etree.ElementTree as ET
 import zipfile
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
@@ -260,10 +260,11 @@ def dated_workbook_cutoff(source, year):
 def dallas(through,offline,year=2026):
     if year==2024:
         source='https://www.dallascountyvotes.org/wp-content/uploads/2024/11/Early-Voting-Turnout-By-Date-Location-Report_11.01.24.xlsx'
-        # Immutable aggregate already acquired and verified by the historical
-        # collector, distinct from the residence-precinct workbook.
+        # Prefer the inspected immutable aggregate when supplied by a local
+        # project. Public/CI checkouts can acquire the same official aggregate;
+        # they must not depend on an unversioned original-project archive.
         path=ROOT.parent/'sources/refresh-2026-10-23/county-a/dallas-2024-location-totals.xlsx'
-        raw=path.read_bytes()
+        raw=path.read_bytes() if path.exists() else fetch(source,'dallas-2024.xlsx',offline)
     else:
         landing='https://www.dallascountyvotes.org/election-results/historical/november-3-2026-general-and-joint-election/'
         page=fetch(landing,'dallaspage.html',offline).decode()
@@ -319,6 +320,28 @@ def historical():
     return result
 
 
+def seed_controls(previous, historical_rows, through):
+    """Historical SOS is fallback to county controls, and refreshes its own edition.
+
+    A later failed native collector must not silently downgrade a reviewed
+    county control to an older SOS administrative revision. Fresh successful
+    county jobs still replace these seeds normally in the main refresh loop.
+    """
+    controls={(r['county'],r['year'],r['date']):r for r in previous
+              if r.get('scope')=='in_person' and r.get('completed') is True
+              and date.fromisoformat(r['date'])<=through}
+    for row in historical_rows:
+        key=(row['county'],row['year'],row['date'])
+        prior=controls.get(key)
+        source=urlparse(prior['source']) if prior else None
+        prior_is_sos=(prior is not None and prior['year']==2024
+                      and source.hostname=='earlyvoting.texas-election.com'
+                      and source.path.lower()=='/elections/getevdetails.do')
+        if prior is None or prior_is_sos:
+            controls[key]=row
+    return controls
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     yesterday=datetime.now(ZoneInfo('America/Chicago')).date()-timedelta(days=1)
@@ -330,8 +353,7 @@ def main():
     # Retain prior exact-date controls if a rotating report fails or ceases to
     # expose old days. Never carry a prior total into a later date.
     previous=json.loads(OUT.read_text()) if OUT.exists() else {'controls':[]}
-    controls={(r['county'],r['year'],r['date']):r for r in previous['controls'] if r.get('scope')=='in_person' and r.get('completed') is True and date.fromisoformat(r['date'])<=args.through}
-    for row in historical():controls[(row['county'],row['year'],row['date'])]=row
+    controls=seed_controls(previous['controls'],historical(),args.through)
     jobs={
         'harris':lambda:harris(args.through,args.offline),
         'tarrant-2026':lambda:tarrant(args.through,args.offline),

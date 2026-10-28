@@ -1,0 +1,544 @@
+{
+  "checked_at": "2026-10-28T15:31:17.405433+00:00",
+  "requested_cutoff": "2026-10-27",
+  "raw_voter_rows_retained": false,
+  "collectors": [
+    {
+      "county": "collin",
+      "command": [
+        "uv",
+        "run",
+        "--with",
+        "curl-cffi==0.16.3",
+        "--with",
+        "playwright",
+        "python",
+        "dashboard/scripts/collect_collin.py",
+        "--through",
+        "2026-10-27",
+        "--county",
+        "collin"
+      ],
+      "seconds": 13.02,
+      "exit_code": 0,
+      "days": [
+        {
+          "date": "2026-10-19",
+          "votes": 33789,
+          "native_cells": 260,
+          "quarantines": 5,
+          "source": "https://www.collincountytx.gov/docs/default-source/elections/election-rosters/early-voters-through-october-27-2026.xlsx?sfvrsn=dde5f30f_3",
+          "sha256": "06c3a7c2fb33478917670948bff92d89086747edcd3202f2d7ce081b51bcae89",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-20",
+          "votes": 33667,
+          "native_cells": 264,
+          "quarantines": 1,
+          "source": "https://www.collincountytx.gov/docs/default-source/elections/election-rosters/early-voters-through-october-27-2026.xlsx?sfvrsn=dde5f30f_3",
+          "sha256": "06c3a7c2fb33478917670948bff92d89086747edcd3202f2d7ce081b51bcae89",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-21",
+          "votes": 30750,
+          "native_cells": 261,
+          "quarantines": 4,
+          "source": "https://www.collincountytx.gov/docs/default-source/elections/election-rosters/early-voters-through-october-27-2026.xlsx?sfvrsn=dde5f30f_3",
+          "sha256": "06c3a7c2fb33478917670948bff92d89086747edcd3202f2d7ce081b51bcae89",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-22",
+          "votes": 29193,
+          "native_cells": 264,
+          "quarantines": 2,
+          "source": "https://www.collincountytx.gov/docs/default-source/elections/election-rosters/early-voters-through-october-27-2026.xlsx?sfvrsn=dde5f30f_3",
+          "sha256": "06c3a7c2fb33478917670948bff92d89086747edcd3202f2d7ce081b51bcae89",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-23",
+          "votes": 34347,
+          "native_cells": 263,
+          "quarantines": 2,
+          "source": "https://www.collincountytx.gov/docs/default-source/elections/election-rosters/early-voters-through-october-27-2026.xlsx?sfvrsn=dde5f30f_3",
+          "sha256": "06c3a7c2fb33478917670948bff92d89086747edcd3202f2d7ce081b51bcae89",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-24",
+          "votes": 33710,
+          "native_cells": 263,
+          "quarantines": 2,
+          "source": "https://www.collincountytx.gov/docs/default-source/elections/election-rosters/early-voters-through-october-27-2026.xlsx?sfvrsn=dde5f30f_3",
+          "sha256": "06c3a7c2fb33478917670948bff92d89086747edcd3202f2d7ce081b51bcae89",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-25",
+          "votes": 16512,
+          "native_cells": 265,
+          "quarantines": 1,
+          "source": "https://www.collincountytx.gov/docs/default-source/elections/election-rosters/early-voters-through-october-27-2026.xlsx?sfvrsn=dde5f30f_3",
+          "sha256": "06c3a7c2fb33478917670948bff92d89086747edcd3202f2d7ce081b51bcae89",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-26",
+          "votes": 29725,
+          "native_cells": 266,
+          "quarantines": 1,
+          "source": "https://www.collincountytx.gov/docs/default-source/elections/election-rosters/early-voters-through-october-27-2026.xlsx?sfvrsn=dde5f30f_3",
+          "sha256": "06c3a7c2fb33478917670948bff92d89086747edcd3202f2d7ce081b51bcae89",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-27",
+          "votes": 27383,
+          "native_cells": 262,
+          "quarantines": 5,
+          "source": "https://www.collincountytx.gov/docs/default-source/elections/election-rosters/early-voters-through-october-27-2026.xlsx?sfvrsn=dde5f30f_3",
+          "sha256": "06c3a7c2fb33478917670948bff92d89086747edcd3202f2d7ce081b51bcae89",
+          "cumulative": false
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "county": "panola",
+      "command": [
+        "uv",
+        "run",
+        "--with",
+        "curl-cffi==0.16.3",
+        "--with",
+        "playwright",
+        "python",
+        "dashboard/scripts/collect_panola.py",
+        "--through",
+        "2026-10-27",
+        "--county",
+        "panola"
+      ],
+      "seconds": 4.71,
+      "exit_code": 0,
+      "days": [
+        {
+          "date": "2026-10-19",
+          "votes": 31,
+          "native_cells": 4,
+          "quarantines": 15,
+          "source": "https://www.co.panola.tx.us/DocumentCenter/View/1924",
+          "sha256": "f24435286800767b7661086e49b63f7df81c955ba9ab9262ddb16a97e51da3a1",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-20",
+          "votes": 45,
+          "native_cells": 4,
+          "quarantines": 15,
+          "source": "https://www.co.panola.tx.us/DocumentCenter/View/1925",
+          "sha256": "65c04f9fbf43c6138215408e417af92c930b25620880f99db1d991e336c78e3c",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-21",
+          "votes": 23,
+          "native_cells": 3,
+          "quarantines": 17,
+          "source": "https://www.co.panola.tx.us/DocumentCenter/View/1926",
+          "sha256": "70aad98359d757033ff72f3a0fb7bd040d0ae7a075c514bd4a10b6df30991ab2",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-22",
+          "votes": 64,
+          "native_cells": 9,
+          "quarantines": 10,
+          "source": "https://www.co.panola.tx.us/DocumentCenter/View/1927",
+          "sha256": "3b53d99edd732ab5eb00ecb0244875ef53377afb70d036cf368317608439233d",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-23",
+          "votes": 69,
+          "native_cells": 9,
+          "quarantines": 11,
+          "source": "https://www.co.panola.tx.us/DocumentCenter/View/1928",
+          "sha256": "47477183edc547a11431fa42cb24d00d85328c0d3ed0acedaa22668f58779fb9",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-24",
+          "votes": 40,
+          "native_cells": 10,
+          "quarantines": 8,
+          "source": "https://www.co.panola.tx.us/DocumentCenter/View/1929",
+          "sha256": "da11c39ac0db5e1f31cad39f032eea02f670e179fb447913ad170b8f00731495",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-25",
+          "votes": 62,
+          "native_cells": 13,
+          "quarantines": 3,
+          "source": "https://www.co.panola.tx.us/DocumentCenter/View/1930",
+          "sha256": "7406412ddc45e3d1756ee343c04e0ea36399fae8bfa25d2679b0aed285c97484",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-26",
+          "votes": 30,
+          "native_cells": 6,
+          "quarantines": 16,
+          "source": "https://www.co.panola.tx.us/DocumentCenter/View/1931",
+          "sha256": "7be90b2f601a96133bd96809f92c408a86d43e68b09253670f5ce5ec5cb33fb2",
+          "cumulative": false
+        }
+      ],
+      "stderr": "{\"county\": \"panola\", \"failed_dates\": {\"2026-10-27\": \"Panola native trailer does not reconcile unique and blank identities\"}}\n"
+    },
+    {
+      "county": "sanpatricio",
+      "command": [
+        "uv",
+        "run",
+        "--with",
+        "curl-cffi==0.16.3",
+        "--with",
+        "playwright",
+        "python",
+        "dashboard/scripts/collect_county_native.py",
+        "--through",
+        "2026-10-27",
+        "--county",
+        "sanpatricio"
+      ],
+      "seconds": 4.36,
+      "exit_code": 0,
+      "days": [
+        {
+          "date": "2026-10-19",
+          "votes": 1911,
+          "native_cells": 27,
+          "quarantines": 0,
+          "source": "https://www.sanpatriciocountytx.gov/upload/page/0125/2026/General%20Election/Voting%20Rosters/October%2019%20List%20of%20Voters.pdf",
+          "sha256": "3cb74a9065c5872219b077bc796731d18d4218ef23e0a18548f89141c86e774e",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-20",
+          "votes": 1646,
+          "native_cells": 26,
+          "quarantines": 0,
+          "source": "https://www.sanpatriciocountytx.gov/upload/page/0125/2026/General%20Election/Voting%20Rosters/List%20of%20Voters%20October%2020.pdf",
+          "sha256": "759e88d5b6ecebadb320ed86ae10ffa2c263c457d03a7c701c5e5a915068e9e9",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-21",
+          "votes": 1364,
+          "native_cells": 26,
+          "quarantines": 0,
+          "source": "https://www.sanpatriciocountytx.gov/upload/page/0125/2026/General%20Election/Voting%20Rosters/List%20of%20Voters%20October%2021.pdf",
+          "sha256": "d9a9119842c423ab97b50c6f86f4ba1868b2db0718025b04fb59ad3b52879d03",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-22",
+          "votes": 1206,
+          "native_cells": 26,
+          "quarantines": 0,
+          "source": "https://www.sanpatriciocountytx.gov/upload/page/0125/2026/General%20Election/Voting%20Rosters/List%20of%20Voters%20October%2022.pdf",
+          "sha256": "3c23bc6b4aa2596cc70f6bc441c2c2bb71c3bd0c2b9238396e1abb124b89f460",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-23",
+          "votes": 1237,
+          "native_cells": 25,
+          "quarantines": 0,
+          "source": "https://www.sanpatriciocountytx.gov/upload/page/0125/2026/General%20Election/Voting%20Rosters/List%20of%20Voters%20October%2023.pdf",
+          "sha256": "424c3a91bb55856ad190b512b1e1f73422005fac62f6228522e6f17df67772f5",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-24",
+          "votes": 713,
+          "native_cells": 25,
+          "quarantines": 0,
+          "source": "https://www.sanpatriciocountytx.gov/upload/page/0125/2026/General%20Election/Voting%20Rosters/Voters%20Saturday%20October%2024.pdf",
+          "sha256": "4ddc9cdca2e8bda0b903cdce5f3f6d301b2d2f000b433f12be12dada0ff25aad",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-25",
+          "votes": 91,
+          "native_cells": 14,
+          "quarantines": 0,
+          "source": "https://www.sanpatriciocountytx.gov/upload/page/0125/2026/General%20Election/Voting%20Rosters/List%20of%20Voters%20October%2025.pdf",
+          "sha256": "e9a5ed3593fe821fb58d5ada1b2c8613de5a4e14af395511974d53e4cb4bd9ce",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-26",
+          "votes": 976,
+          "native_cells": 27,
+          "quarantines": 0,
+          "source": "https://www.sanpatriciocountytx.gov/upload/page/0125/2026/General%20Election/Voting%20Rosters/List%20of%20Voters%20October%2026.pdf",
+          "sha256": "9ca625d06f5bf3aa579e69a84e72f9fcced7f7ac969d36f59be56dc499ff20ff",
+          "cumulative": false
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "county": "tarrant",
+      "command": [
+        "uv",
+        "run",
+        "--with",
+        "curl-cffi==0.16.3",
+        "--with",
+        "playwright",
+        "python",
+        "dashboard/scripts/collect_tarrant_anchor.py",
+        "--through",
+        "2026-10-27"
+      ],
+      "seconds": 8.56,
+      "exit_code": 0,
+      "days": [
+        {
+          "date": "2026-10-27",
+          "votes": 234047,
+          "native_cells": 591,
+          "quarantines": 279,
+          "source": "https://www.tarrantcountytx.gov/content/dam/main/elections/2026/1126/ev_reports/Early_voting_in_person_report.zip",
+          "sha256": "3072b66415383950c21142bd5a2eb5fe3aa22136b724da9a74e5a566e72b5737",
+          "cumulative": true
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "county": "waller",
+      "command": [
+        "uv",
+        "run",
+        "--with",
+        "curl-cffi==0.16.3",
+        "--with",
+        "playwright",
+        "python",
+        "dashboard/scripts/collect_county_native.py",
+        "--through",
+        "2026-10-27",
+        "--county",
+        "waller"
+      ],
+      "seconds": 3.4,
+      "exit_code": 0,
+      "days": [
+        {
+          "date": "2026-10-19",
+          "votes": 1723,
+          "native_cells": 19,
+          "quarantines": 0,
+          "source": "https://www.co.waller.tx.us/upload/page/0286/October%2019.26%20In%20Person.pdf",
+          "sha256": "7eaf6c07650568c9cb5a56e8f708e16dbcdce5a29a2d78f5d590d9b64e431a03",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-20",
+          "votes": 1388,
+          "native_cells": 18,
+          "quarantines": 1,
+          "source": "https://www.co.waller.tx.us/upload/page/0286/October%2020.26%20In%20Person.pdf",
+          "sha256": "9ba289161c8ae134196d48effa0542c2e21eb15e364902ab02d33b8eaeb722aa",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-21",
+          "votes": 1411,
+          "native_cells": 19,
+          "quarantines": 0,
+          "source": "https://www.co.waller.tx.us/upload/page/0286/October%2021.26%20In%20Person.pdf",
+          "sha256": "3301a3fb6d12b9bb39dd8117c1a0c74c76f1f8b9c0298305bf395dcff5423dcb",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-22",
+          "votes": 1385,
+          "native_cells": 19,
+          "quarantines": 0,
+          "source": "https://www.co.waller.tx.us/upload/page/0286/October%2022.26%20In%20Person.pdf",
+          "sha256": "606f9bfab810eaef22b233216a93740856844f89f1d92d32cac41bcc95ff3efd",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-23",
+          "votes": 1636,
+          "native_cells": 19,
+          "quarantines": 0,
+          "source": "https://www.co.waller.tx.us/upload/page/0286/October%2023.26%20In%20Person.pdf",
+          "sha256": "3e335a74a7c1869944a1fe4727c44e650b42a0075ca684074b19938b51b622e3",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-24",
+          "votes": 1424,
+          "native_cells": 19,
+          "quarantines": 0,
+          "source": "https://www.co.waller.tx.us/upload/page/0286/October%2024.26%20In%20Person.pdf",
+          "sha256": "54cd80c379c069ea48bb16c47db439cd184ee9a0c86810248275cc5cfaa2e6a1",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-25",
+          "votes": 557,
+          "native_cells": 19,
+          "quarantines": 0,
+          "source": "https://www.co.waller.tx.us/upload/page/0286/October%2025.26%20In%20Person.pdf",
+          "sha256": "c8862594380f1008a12f57d1105e3eb94022fe5d67fa5eafd68d8211cdaa9c41",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-26",
+          "votes": 1424,
+          "native_cells": 19,
+          "quarantines": 0,
+          "source": "https://www.co.waller.tx.us/upload/page/0286/October%2026.26%20In%20Person.pdf",
+          "sha256": "3e01c7fc7504ec9fd548c186e2538569090d8ffe564aaeb9f16fde4a9a013f49",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-27",
+          "votes": 1304,
+          "native_cells": 19,
+          "quarantines": 0,
+          "source": "https://www.co.waller.tx.us/upload/page/0286/October%2027.26%20In%20Person.pdf",
+          "sha256": "4da71c357d9771ecd7676c3868811df49592dc97cfd5ac959ea4917683873d3e",
+          "cumulative": false
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "county": "washington",
+      "command": [
+        "uv",
+        "run",
+        "--with",
+        "curl-cffi==0.16.3",
+        "--with",
+        "playwright",
+        "python",
+        "dashboard/scripts/collect_county_native.py",
+        "--through",
+        "2026-10-27",
+        "--county",
+        "washington"
+      ],
+      "seconds": 4.09,
+      "exit_code": 0,
+      "days": [
+        {
+          "date": "2026-10-19",
+          "votes": 1263,
+          "native_cells": 18,
+          "quarantines": 0,
+          "source": "https://www.co.washington.tx.us/upload/page/10698/2026/2026%2011%2003/101926%20washington%20county.xlsx",
+          "sha256": "4011d26ce0c1f2aacc30dc702168560bcce3aae6cb8fa2884c97b44123b3f0b3",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-20",
+          "votes": 1304,
+          "native_cells": 18,
+          "quarantines": 0,
+          "source": "https://www.co.washington.tx.us/upload/page/10698/2026/2026%2011%2003/102026%20washington%20county.xlsx",
+          "sha256": "412cfb9cfa5f013d1dea5ae9d7783d0ffc9feb7247d851a1e65f6ef9c37cb620",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-21",
+          "votes": 1201,
+          "native_cells": 17,
+          "quarantines": 0,
+          "source": "https://www.co.washington.tx.us/upload/page/10698/2026/2026%2011%2003/102126%20voter%20list.xlsx",
+          "sha256": "2f3053a3df2ae3a887d2174e455244b755c9dd48ba8b56c91136187f95a4a5d7",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-22",
+          "votes": 1032,
+          "native_cells": 18,
+          "quarantines": 0,
+          "source": "https://www.co.washington.tx.us/upload/page/10698/2026/2026%2011%2003/voter%20history%20102226.xlsx",
+          "sha256": "5829f6a3b1625117017d7ff736a4d9fbd32704b9ee127a33a6a3c6e66a40532f",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-23",
+          "votes": 1101,
+          "native_cells": 18,
+          "quarantines": 0,
+          "source": "https://www.co.washington.tx.us/upload/page/10698/2026/2026%2011%2003/Washington%20county%20voter%20history%2010232026.xlsx",
+          "sha256": "0713c0ee39c2fa5ce00fd4dcc9d77bad89258801ee3c032e2baa37ff822c6376",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-24",
+          "votes": 636,
+          "native_cells": 18,
+          "quarantines": 0,
+          "source": "https://www.co.washington.tx.us/upload/page/10698/2026/2026%2011%2003/Voter%20lister%20102426.xlsx",
+          "sha256": "34c4d436c3665d92366185a3289dade04a75fa10d5e1c10cdec6f41241100726",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-25",
+          "votes": 350,
+          "native_cells": 16,
+          "quarantines": 0,
+          "source": "https://www.co.washington.tx.us/upload/page/10698/2026/2026%2011%2003/voter%20history%20102526.xlsx",
+          "sha256": "2f11aaf95b6c5306f5faa963de7dfde4c874a78e5c35c16e8a69d49171062aaf",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-26",
+          "votes": 994,
+          "native_cells": 18,
+          "quarantines": 0,
+          "source": "https://www.co.washington.tx.us/upload/page/10698/2026/2026%2011%2003/voter%20history%20102626.xlsx",
+          "sha256": "c90edbf3663c258aca6d30708b48c31bcd9289a3c1fe8d36c7a8ab4d238940d7",
+          "cumulative": false
+        },
+        {
+          "date": "2026-10-27",
+          "votes": 881,
+          "native_cells": 18,
+          "quarantines": 0,
+          "source": "https://www.co.washington.tx.us/upload/page/10698/2026/2026%2011%2003/102726%20wc%20voting%20history.xlsx",
+          "sha256": "c6e247fe76837bc5a1b64bff9cb199b82fa020345756f22796e547f504ecc972",
+          "cumulative": false
+        }
+      ],
+      "stderr": "{\"county\": \"washington\", \"date\": \"2026-10-27\", \"status\": \"alias-proof-unavailable\", \"error\": \"ValueError\"}\n"
+    }
+  ],
+  "panola_day9_rejected_control": {
+    "source": "https://www.co.panola.tx.us/DocumentCenter/View/1932",
+    "native_sha256": "438a3ce2b78664063c8fef52c9a92c6005e071c416d9a1860be9ba9d395939a1",
+    "export_timestamp": "2026-10-28T07:44:16-05:00",
+    "printed_records": 420,
+    "valid_unique_id_count": 377,
+    "blank_or_short_id_rows": 6,
+    "reconciled_observations": 383,
+    "declared_batch_trailer": 382,
+    "disposition": "withheld; prior completed dates remain available"
+  }
+}

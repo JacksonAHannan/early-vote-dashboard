@@ -118,9 +118,9 @@ fn days_from(
     let mut output = Vec::new();
     for i in 0..n {
         let day = start(year) + chrono::Duration::days(i64::from(i));
-        let counts = days
-            .remove(&day)
-            .with_context(|| format!("county ordinary roster missing {day}"))?;
+        let Some(counts) = days.remove(&day) else {
+            continue; // An unposted date cannot invalidate independent posted dates.
+        };
         output.push(Daily {
             zero_evidence: Vec::new(),
             allow_daily_difference: None,
@@ -136,6 +136,10 @@ fn days_from(
             cumulative: false,
         });
     }
+    ensure!(
+        !output.is_empty(),
+        "county ordinary roster has no observed dates"
+    );
     Ok(output)
 }
 
@@ -191,7 +195,7 @@ impl CountyRoster {
             let mut counts = match counts_by_day.remove(&day) {
                 Some(counts) => counts,
                 None if bad_cells.is_some() => Counts::new(),
-                None => bail!("county ordinary roster missing {day}"),
+                None => continue,
             };
             let mut scope = note.to_string();
             if let Some(cells) = bad_cells {
@@ -236,6 +240,9 @@ impl CountyRoster {
 }
 
 fn montgomery_rows(bytes: &[u8], day: NaiveDate, roster: &mut CountyRoster) -> Result<()> {
+    // Validate a dated file locally; a rejected row must not leave identities or
+    // quarantine flags that contaminate the next independently fetched date.
+    let mut dated = CountyRoster::default();
     let mut csv = csv::ReaderBuilder::new()
         .trim(csv::Trim::All)
         .from_reader(bytes);
@@ -255,7 +262,28 @@ fn montgomery_rows(bytes: &[u8], day: NaiveDate, roster: &mut CountyRoster) -> R
             continue;
         }
         ensure!(date(&row[d])? == day, "Montgomery daily date mismatch");
-        roster.record(&row[id], day, &row[p], true)?;
+        dated.record(&row[id], day, &row[p], true)?;
+    }
+    for (id, (_, precinct)) in &dated.voters {
+        if let Some((_, old_precinct)) = roster.voters.get(id) {
+            ensure!(
+                old_precinct == precinct,
+                "conflicting duplicate in county roster"
+            );
+        }
+    }
+    for (id, (when, precinct)) in dated.voters {
+        insert(&mut roster.voters, &id, when, &precinct, true)?;
+    }
+    for (when, cells) in dated.blank_identifiers {
+        for (precinct, count) in cells {
+            *roster
+                .blank_identifiers
+                .entry(when)
+                .or_default()
+                .entry(precinct)
+                .or_default() += count;
+        }
     }
     Ok(())
 }
@@ -453,6 +481,7 @@ async fn native_county(county: &str, n: u32) -> Result<Vec<Daily>> {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(match county {
                 "collin" => "scripts/collect_collin.py",
                 "panola" => "scripts/collect_panola.py",
+                "cameron" | "denton" => "scripts/collect_large_county_refresh.py",
                 _ => "scripts/collect_county_native.py",
             }),
         )
@@ -659,6 +688,48 @@ async fn panola(client: &reqwest::Client, reference: &Reference, n: u32) -> Resu
     Ok(values)
 }
 
+async fn large_county(
+    client: &reqwest::Client,
+    reference: &Reference,
+    n: u32,
+) -> Result<Vec<Daily>> {
+    // Replaced county workbooks supply explicit CHECK-IN dates. A failed latest
+    // section does not erase valid earlier sections or dated SOS alternatives.
+    let mut values = Vec::new();
+    let mut identities = BTreeSet::new();
+    for day in 0..n {
+        let date = start(2026) + chrono::Duration::days(i64::from(day));
+        match crate::fetch::fetch_state(client, reference, date, &mut identities).await {
+            Ok(source) => values.push(source),
+            Err(error) => eprintln!("{} dated SOS {date}: {error:#}", reference.name),
+        }
+    }
+    let report = crate::quality::Report::load(std::path::Path::new(env!("CARGO_MANIFEST_DIR")))
+        .unwrap_or_default();
+    values = report.sources(&reference.id, &values);
+    match native_county(&reference.id, n).await {
+        Ok(native) => {
+            let universe = reference
+                .groups
+                .iter()
+                .flat_map(|g| g.new.iter().cloned())
+                .collect();
+            prefer_more_native_observations(
+                &mut values,
+                report.sources(&reference.id, &native),
+                &universe,
+            );
+        }
+        Err(error) => eprintln!("{} native date alternative: {error:#}", reference.name),
+    }
+    ensure!(
+        !values.is_empty(),
+        "no usable dated {} in-person reports",
+        reference.name
+    );
+    Ok(values)
+}
+
 pub async fn collect(
     client: &reqwest::Client,
     r: &Reference,
@@ -673,6 +744,7 @@ pub async fn collect(
         "nueces" if year == 2026 => nueces(client, r, n).await,
         "panola" if year == 2026 => panola(client, r, n).await,
         "collin" if year == 2026 => collin(client, r, n).await,
+        "cameron" | "denton" if year == 2026 => large_county(client, r, n).await,
         "fortbend" if crate::fort_bend::supports(year) => {
             crate::fort_bend::collect(client, r, year, n).await
         }
@@ -699,6 +771,8 @@ pub fn has_adapter(id: &str, year: i32) -> bool {
                 "sanpatricio",
                 "collin",
                 "panola",
+                "cameron",
+                "denton",
             ]
             .contains(&id))
 }
@@ -740,41 +814,18 @@ async fn travis(client: &reqwest::Client, r: &Reference, year: i32, n: u32) -> R
     let hash = format!("{:x}", Sha256::digest(&raw));
     let members = zip_members(raw)?;
     let mut voters = Voters::new();
-    let mut found = 0;
     for i in 0..n {
         let day = start(year) + chrono::Duration::days(i64::from(i));
         let name = format!("{} Early Vote.xlsx", day.format("%m.%d.%Y"));
-        let (_, bytes) = members
-            .iter()
-            .find(|(name2, _)| name2 == &name)
-            .with_context(|| format!("Travis daily workbook not posted: {day}"))?;
-        let rows = workbook(bytes.clone())?;
-        let (first, headers) = header(&rows, &["VUID", "PCT"])?;
-        ensure!(
-            rows.iter()
-                .take(first)
-                .flatten()
-                .any(|v| v == "Travis County Early Vote Roster"),
-            "wrong Travis roster title"
-        );
-        ensure!(
-            rows.iter()
-                .take(first)
-                .flatten()
-                .filter_map(|v| v.parse::<f64>().ok())
-                .any(|serial| date(&serial.to_string()).ok() == Some(day)),
-            "Travis filename/date mismatch"
-        );
-        for row in rows.iter().skip(first + 1) {
-            let id = field(row, &headers, "VUID");
-            if id.is_empty() {
-                continue;
-            }
-            insert(&mut voters, id, day, field(row, &headers, "PCT"), false)?;
+        let Some((_, bytes)) = members.iter().find(|(name2, _)| name2 == &name) else {
+            eprintln!("Travis daily workbook not posted: {day}; other dates retained");
+            continue;
+        };
+        let result = workbook(bytes.clone()).and_then(|rows| travis_rows(&rows, day, &mut voters));
+        if let Err(error) = result {
+            eprintln!("Travis dated workbook {day}: {error:#}; other dates retained");
         }
-        found += 1;
     }
-    ensure!(found == n, "missing Travis day");
     days_from(
         voters,
         r,
@@ -785,6 +836,44 @@ async fn travis(client: &reqwest::Client, r: &Reference, year: i32, n: u32) -> R
         "County daily Early Vote workbooks; Limited Ballot and Ballot By Mail excluded. Completed four-day roster and vendor graph totals agree; daily rounding/revisions differ by one voter.",
     )
 }
+
+fn travis_rows(rows: &[Vec<String>], day: NaiveDate, voters: &mut Voters) -> Result<()> {
+    let (first, headers) = header(rows, &["VUID", "PCT"])?;
+    ensure!(
+        rows.iter()
+            .take(first)
+            .flatten()
+            .any(|v| v == "Travis County Early Vote Roster"),
+        "wrong Travis roster title"
+    );
+    ensure!(
+        rows.iter()
+            .take(first)
+            .flatten()
+            .filter_map(|v| v.parse::<f64>().ok())
+            .any(|serial| date(&serial.to_string()).ok() == Some(day)),
+        "Travis filename/date mismatch"
+    );
+    let mut dated = Voters::new();
+    for row in rows.iter().skip(first + 1) {
+        let id = field(row, &headers, "VUID");
+        if id.is_empty() {
+            continue;
+        }
+        insert(&mut dated, id, day, field(row, &headers, "PCT"), false)?;
+    }
+    for (id, (when, precinct)) in &dated {
+        if let Some((old_when, old_precinct)) = voters.get(id) {
+            ensure!(
+                old_when == when && old_precinct == precinct,
+                "conflicting duplicate in county roster"
+            );
+        }
+    }
+    voters.extend(dated);
+    Ok(())
+}
+
 async fn montgomery(
     client: &reqwest::Client,
     r: &Reference,
@@ -804,15 +893,28 @@ async fn montgomery(
             "https://elections.mctx.org/EVHistoryFiles/{prefix}_{}.zip",
             day.format("%m.%d.%Y")
         );
-        let raw = download(client, &url, None).await?;
+        let raw = match download(client, &url, None).await {
+            Ok(raw) => raw,
+            Err(error) => {
+                eprintln!("Montgomery dated source {day}: {error:#}; other dates retained");
+                continue;
+            }
+        };
         let hash = format!("{:x}", Sha256::digest(&raw));
-        let members = zip_members(raw)?;
-        let (_, bytes) = members
-            .iter()
-            .find(|(name, _)| name.to_lowercase().ends_with(".csv"))
-            .context("no Montgomery CSV")?;
-        montgomery_rows(bytes, day, &mut roster)?;
-        evidence.push((day, url, hash));
+        let parsed = (|| {
+            let members = zip_members(raw)?;
+            let (_, bytes) = members
+                .iter()
+                .find(|(name, _)| name.to_lowercase().ends_with(".csv"))
+                .context("no Montgomery CSV")?;
+            montgomery_rows(bytes, day, &mut roster)
+        })();
+        match parsed {
+            Ok(()) => evidence.push((day, url, hash)),
+            Err(error) => {
+                eprintln!("Montgomery dated source {day}: {error:#}; other dates retained")
+            }
+        }
     }
     let mut days = roster.days(
         r,
@@ -1176,6 +1278,120 @@ mod tests {
             "exact_pairs":[], "presidential":{}, "references":{}
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn partial_native_workbook_retains_observed_dates_when_latest_not_posted() {
+        let first = start(2026);
+        let mut voters = Voters::new();
+        insert(&mut voters, "valid-first", first, "001", false).unwrap();
+        insert(
+            &mut voters,
+            "valid-third",
+            first + chrono::Duration::days(2),
+            "002",
+            false,
+        )
+        .unwrap();
+        let days = days_from(
+            voters,
+            &roster_reference(),
+            2026,
+            4,
+            "official",
+            "hash",
+            "Scope.",
+        )
+        .unwrap();
+        assert_eq!(
+            days.iter().map(|d| d.date).collect::<Vec<_>>(),
+            vec![first, first + chrono::Duration::days(2)]
+        );
+        assert!(days.iter().all(|d| !d.complete && !d.cumulative));
+        assert!(
+            days_from(
+                Voters::new(),
+                &roster_reference(),
+                2026,
+                4,
+                "official",
+                "hash",
+                "Scope."
+            )
+            .is_err()
+        );
+        let mut roster = CountyRoster::default();
+        roster.record("valid-first", first, "001", false).unwrap();
+        roster
+            .record("blank-affected", first, "002", false)
+            .unwrap();
+        roster.record("", first, "002", false).unwrap();
+        let days = roster
+            .days(&roster_reference(), 2026, 4, "official", "hash", "Scope.")
+            .unwrap();
+        assert_eq!(days.len(), 1);
+        assert_eq!(days[0].counts, Counts::from([("1".into(), 1)]));
+        assert_eq!(days[0].unavailable_precincts, vec!["2"]);
+    }
+
+    #[test]
+    fn montgomery_failed_date_cannot_poison_later_refresh_identity_or_quarantine() {
+        let first = start(2026);
+        let mut roster = CountyRoster::default();
+        roster.record("earlier", first, "001", true).unwrap();
+        let failed = b"VoteType,DateVoted,CountyElectionPrecinct,VUID\nE,10/20/2026,002,fresh\nE,10/20/2026,003,\nE,wrong-date,004,bad\n";
+        assert!(montgomery_rows(failed, first + chrono::Duration::days(1), &mut roster).is_err());
+        assert_eq!(roster.voters.len(), 1);
+        assert!(roster.blank_identifiers.is_empty());
+        montgomery_rows(
+            b"VoteType,DateVoted,CountyElectionPrecinct,VUID\nE,10/21/2026,005,fresh\n",
+            first + chrono::Duration::days(2),
+            &mut roster,
+        )
+        .unwrap();
+        assert_eq!(
+            roster.voters["fresh"],
+            (first + chrono::Duration::days(2), "5".into())
+        );
+    }
+
+    #[test]
+    fn travis_dated_workbook_validation_commits_only_successful_dates() {
+        let first = start(2026);
+        let make_rows = |when: NaiveDate, values: &[(&str, &str)]| {
+            let serial = (when - NaiveDate::from_ymd_opt(1899, 12, 30).unwrap()).num_days();
+            let mut rows = vec![
+                vec!["Travis County Early Vote Roster".to_string()],
+                vec![serial.to_string()],
+                vec!["VUID".into(), "PCT".into()],
+            ];
+            rows.extend(
+                values
+                    .iter()
+                    .map(|(id, p)| vec![id.to_string(), p.to_string()]),
+            );
+            rows
+        };
+        let mut voters = Voters::new();
+        travis_rows(&make_rows(first, &[("earlier", "001")]), first, &mut voters).unwrap();
+        let second = first + chrono::Duration::days(1);
+        let failed = make_rows(second, &[("fresh", "002"), ("earlier", "001")]);
+        assert!(travis_rows(&failed, second, &mut voters).is_err());
+        assert_eq!(voters.len(), 1);
+        let third = first + chrono::Duration::days(2);
+        travis_rows(&make_rows(third, &[("fresh", "003")]), third, &mut voters).unwrap();
+        let days = days_from(
+            voters,
+            &roster_reference(),
+            2026,
+            4,
+            "official",
+            "hash",
+            "scope",
+        )
+        .unwrap();
+        assert_eq!(days.len(), 2);
+        assert_eq!(days[1].counts, Counts::from([("3".into(), 1)]));
     }
 
     #[test]

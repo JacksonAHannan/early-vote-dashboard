@@ -211,6 +211,7 @@ fn availability_notes(
         "Fort Bend invalid requested day count"
     );
     let mut notes = BTreeMap::new();
+    let mut rejected = Vec::new();
     for i in 0..n {
         let date = start(year) + Duration::days(i64::from(i));
         // A missing date remains unavailable; an existing dated precinct subset
@@ -218,59 +219,76 @@ fn availability_notes(
         let Some(counts) = roster.get(&date) else {
             continue;
         };
-        let actual: u64 = counts.values().sum();
-        ensure!(
-            actual > 0,
-            "Fort Bend empty dated roster cannot establish a reported zero"
-        );
-        let daily = if let Some(control) = controls.get(&date) {
+        let note = (|| -> Result<String> {
+            let actual: u64 = counts.values().sum();
             ensure!(
-                *control > 0,
-                "Fort Bend dated roster conflicts with a zero/future county control on {date}"
+                actual > 0,
+                "Fort Bend empty dated roster cannot establish a reported zero"
             );
-            ensure!(
-                actual <= *control || actual.abs_diff(*control) <= 1,
-                "Fort Bend roster exceeds official in-person daily control on {date}: {actual} records versus {control} ballots"
-            );
-            format!(
-                "Daily roster {actual}; county in-person control {control}; control minus roster {}",
-                i128::from(*control) - i128::from(actual)
-            )
-        } else {
-            format!("Daily roster {actual}; independent daily county control unavailable")
-        };
-        let cumulative: u64 = roster
-            .iter()
-            .filter(|(day, _)| **day <= date)
-            .map(|(_, counts)| counts.values().sum::<u64>())
-            .sum();
-        let mut cumulative_control = Some(0_u64);
-        for j in 0..=i {
-            let earlier = start(year) + Duration::days(i64::from(j));
-            cumulative_control = cumulative_control
-                .zip(controls.get(&earlier))
-                .map(|(sum, value)| sum + value);
-        }
-        let cumulative_note = match cumulative_control {
-            Some(control) => {
+            let daily = if let Some(control) = controls.get(&date) {
                 ensure!(
-                    cumulative <= control || cumulative.abs_diff(control) <= 1,
-                    "Fort Bend reported cumulative roster exceeds county control on {date}"
+                    *control > 0,
+                    "Fort Bend dated roster conflicts with a zero/future county control on {date}"
+                );
+                ensure!(
+                    actual <= *control || actual.abs_diff(*control) <= 1,
+                    "Fort Bend roster exceeds official in-person daily control on {date}: {actual} records versus {control} ballots"
                 );
                 format!(
-                    "Available roster cumulative {cumulative}; county cumulative control {control}; control minus available roster {}",
-                    i128::from(control) - i128::from(cumulative)
+                    "Daily roster {actual}; county in-person control {control}; control minus roster {}",
+                    i128::from(*control) - i128::from(actual)
                 )
+            } else {
+                format!("Daily roster {actual}; independent daily county control unavailable")
+            };
+            // Only accepted dates can contribute to available cumulative votes.
+            // A rejected older date is unavailable, not zero and not a valid total.
+            let cumulative: u64 = actual
+                + notes
+                    .keys()
+                    .map(|day| roster[day].values().sum::<u64>())
+                    .sum::<u64>();
+            let mut cumulative_control = Some(0_u64);
+            for j in 0..=i {
+                let earlier = start(year) + Duration::days(i64::from(j));
+                cumulative_control = cumulative_control
+                    .zip(controls.get(&earlier))
+                    .map(|(sum, value)| sum + value);
             }
-            None => format!(
-                "Available roster cumulative {cumulative}; independent cumulative county control unavailable"
-            ),
-        };
-        notes.insert(date, format!("{daily}. {cumulative_note}. Reported precinct subset; county-wide completion is not established. Missing precincts and dates are not zero and are never allocated."));
+            let cumulative_note = match cumulative_control {
+                Some(control) => {
+                    ensure!(
+                        cumulative <= control || cumulative.abs_diff(control) <= 1,
+                        "Fort Bend reported cumulative roster exceeds county control on {date}"
+                    );
+                    format!(
+                        "Available roster cumulative {cumulative}; county cumulative control {control}; control minus available roster {}",
+                        i128::from(control) - i128::from(cumulative)
+                    )
+                }
+                None => format!(
+                    "Available roster cumulative {cumulative}; independent cumulative county control unavailable"
+                ),
+            };
+            Ok(format!(
+                "{daily}. {cumulative_note}. Reported precinct subset; county-wide completion is not established. Missing precincts and dates are not zero and are never allocated."
+            ))
+        })();
+        match note {
+            Ok(note) => {
+                notes.insert(date, note);
+            }
+            Err(error) => {
+                let failure = format!("{date}: {error:#}");
+                eprintln!("Fort Bend dated native observation withheld: {failure}");
+                rejected.push(failure);
+            }
+        }
     }
     ensure!(
         !notes.is_empty(),
-        "Fort Bend roster contains no requested dated observations"
+        "Fort Bend roster contains no valid requested dated observations; {}",
+        rejected.join("; ")
     );
     Ok(notes)
 }
@@ -405,6 +423,38 @@ mod tests {
         let notes = availability_notes(&roster, &BTreeMap::new(), 2026, 1).unwrap();
         assert!(notes[&start(2026)].contains("independent daily county control unavailable"));
     }
+    #[test]
+    fn one_invalid_control_date_does_not_discard_other_native_dates() {
+        let first = start(2026);
+        let second = first + Duration::days(1);
+        let roster = BTreeMap::from([
+            (first, Counts::from([("101".to_string(), 5)])),
+            (second, Counts::from([("102".to_string(), 7)])),
+        ]);
+        // An out-of-sync zero on the older date must not block a newly posted
+        // valid date; that rejected date contributes no accepted cumulative votes.
+        let notes = availability_notes(
+            &roster,
+            &BTreeMap::from([(first, 0), (second, 10)]),
+            2026,
+            2,
+        )
+        .expect("one conflicted date must not reject the newer usable publication");
+        assert_eq!(notes.keys().copied().collect::<Vec<_>>(), vec![second]);
+        assert!(notes[&second].contains("Available roster cumulative 7"));
+        assert!(notes[&second].contains("county-wide completion is not established"));
+        // A bad newest date likewise cannot revoke an earlier validated date.
+        let notes =
+            availability_notes(&roster, &BTreeMap::from([(first, 5), (second, 2)]), 2026, 2)
+                .unwrap();
+        assert_eq!(notes.keys().copied().collect::<Vec<_>>(), vec![first]);
+        // A date's own inconsistent cumulative proof is still withheld.
+        let notes =
+            availability_notes(&roster, &BTreeMap::from([(first, 4), (second, 6)]), 2026, 2)
+                .unwrap();
+        assert_eq!(notes.keys().copied().collect::<Vec<_>>(), vec![first]);
+    }
+
     #[test]
     fn links_are_discovered_and_scoped_to_current_county_election() {
         let html = "<a href='/sites/default/files/statistics/2026/EV_1024.xlsx'>EV</a>";

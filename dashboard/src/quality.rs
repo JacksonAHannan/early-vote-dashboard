@@ -323,12 +323,14 @@ impl Report {
             .collect()
     }
 
+    /// Exact hash input for a frozen comparison, including reviewed recovery proofs.
+    pub fn provenance(&self) -> Result<Vec<u8>> {
+        Ok(serde_json::to_vec(&(self, &self.recovery))?)
+    }
+
     pub fn snapshot(&self, raw: &Snapshot, references: &[Reference]) -> Result<Snapshot> {
         let mut snapshot = raw.clone();
-        snapshot.completeness_sha256 = format!(
-            "{:x}",
-            Sha256::digest(serde_json::to_vec(&(self, &self.recovery))?)
-        );
+        snapshot.completeness_sha256 = format!("{:x}", Sha256::digest(self.provenance()?));
         let refs: BTreeMap<_, _> = references.iter().map(|r| (r.id.as_str(), r)).collect();
         for c in &mut snapshot.counties {
             let r = refs.get(c.id.as_str()).context("No geographic reference")?;
@@ -342,7 +344,15 @@ impl Report {
                 .filter_map(|day| crate::matching::period(r, &c.sources, day, true))
                 .collect();
             let latest = c.periods.iter().find(|p| p.day == snapshot.days);
-            c.status = if latest.is_some() {
+            // Qualification must not turn a failed download into an apparently
+            // successful check merely because an exact-date cached pair survives.
+            let collection_error = c.error.take().filter(|error| {
+                error != "No matched cumulative precinct subset at this cutoff; other dates remain available"
+                    && !error.starts_with("No complete paired precinct reports for day(s)")
+            });
+            c.status = if latest.is_some() && collection_error.is_some() {
+                "stale"
+            } else if latest.is_some() {
                 "current"
             } else if c.periods.is_empty() {
                 "missing"
@@ -350,11 +360,9 @@ impl Report {
                 "partial"
             }
             .into();
-            c.error = if latest.is_none() {
-                Some("No matched cumulative precinct subset at this cutoff; other dates remain available".into())
-            } else {
-                None
-            };
+            c.error = collection_error.or_else(|| latest.is_none().then(||
+                "No matched cumulative precinct subset at this cutoff; other dates remain available".into()
+            ));
         }
         Ok(snapshot)
     }

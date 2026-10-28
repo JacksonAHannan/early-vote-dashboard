@@ -1,0 +1,7 @@
+{
+  "url": "https://goelect.txelections.civixapps.com/ivis-evr-ui/main.0ec1640780a1fe5f.js",
+  "checked_at": "2026-10-28T15:28:48.765275+00:00",
+  "status": 200,
+  "sha256": "455b3383290100009def19ecaa4b9e9369780329e9ab63fdd38068fc86e55d0d",
+  "public_download_method": "getFileByFormat(e,n,r,a,o,s){const l=(new pc).set(\"type\",e).set(\"electionId\",n).set(\"electionDate\",r).set(\"county\",a).set(\"countyId\",o).set(\"format\",s);return this.http.get(`${hd.urlAPIIvisSystem}/v1/getFileByFormat`,{responseType:\"json\",params:l})}"
+}

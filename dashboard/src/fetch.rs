@@ -43,7 +43,10 @@ async fn native_download(
             Ok(Some(bytes)) => return Ok(Some(bytes.to_vec())),
             Ok(None) => break, // Browser challenge: use the compatible transport now.
             Err(error)
-                if error.is_status() && !error.status().is_some_and(|s| s.is_server_error()) =>
+                if error.is_status()
+                    && !error.status().is_some_and(|s| {
+                        s.is_server_error() || s == reqwest::StatusCode::TOO_MANY_REQUESTS
+                    }) =>
             {
                 bail!("official download HTTP {}", error.status().unwrap());
             }
@@ -546,6 +549,22 @@ mod tests {
             download(&reqwest::Client::new(), &url, None)
                 .await
                 .expect("gateway failures should retry"),
+            b"good"
+        );
+        assert_eq!(server.await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn rate_limit_retries_before_marking_a_county_unavailable() {
+        let (url, server) = mock_downloads(vec![
+            b"HTTP/1.1 429 Too Many Requests\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\ngood",
+        ])
+        .await;
+        assert_eq!(
+            download(&reqwest::Client::new(), &url, None)
+                .await
+                .expect("temporary rate limit must not lose a newly posted county date"),
             b"good"
         );
         assert_eq!(server.await.unwrap().len(), 2);
