@@ -16,7 +16,7 @@ TAG=os.environ.get('TURNOUT_TEST_TAG','local')
 OUT=ROOT/'analysis/matrix-total'/TAG;OUT.mkdir(parents=True,exist_ok=True)
 REPORT={'url':BASE,'served':SERVED,'checks':[],'javascript_errors':[]}
 def check_column(page):
- state=page.evaluate('({snapshot:{counties:data.counties.map(c=>({reference_groups:c.reference_groups,periods:c.periods.map(p=>({day:p.day,coverage:p.coverage,county_2024:p.county_2024,county_2026:p.county_2026,buckets:p.buckets}))}))},day,cohort,mode,demo:demoViews?.all?{bins:demoViews.all.bins}:null,rows:[...document.querySelectorAll("#matrix tbody tr")].map(r=>({text:r.querySelector(".matrix-total").textContent,title:r.querySelector(".matrix-total").title})),footer:[...document.querySelectorAll("#matrix tfoot .matrix-total")].map(e=>e.textContent)})')
+ state=page.evaluate('({snapshot:{counties:data.counties.map(c=>({reference_groups:c.reference_groups,periods:c.periods.map(p=>({day:p.day,coverage:p.coverage,county_2024:p.county_2024,county_2026:p.county_2026,buckets:p.buckets}))}))},day,cohort,mode,demo:demoViews?.all?{bins:demoViews.all.bins}:null,rows:[...document.querySelectorAll("#matrix tbody tr")].map(r=>({text:r.querySelector(".matrix-total").textContent,title:r.querySelector(".matrix-total").title})),footer:[...document.querySelectorAll("#matrix tfoot .matrix-total:not(.matrix-selection-total)")].map(e=>e.textContent)})')
  periods=[p for c in state['snapshot']['counties'] for p in c['periods'] if p['day']==state['day'] and p.get('coverage',{}).get('available_groups',1)>0]
  if state['mode']=='partisan':
   bins=[{'groups':sum(p['buckets'][i][state['cohort']]['groups'] for p in periods),'votes_2024':sum(p['buckets'][i][state['cohort']]['votes_2024'] for p in periods),'votes_2026':sum(p['buckets'][i][state['cohort']]['votes_2026'] for p in periods)} for i in range(6)]
@@ -44,7 +44,8 @@ def main():
    page.goto(BASE,wait_until='networkidle',timeout=120000)
    page.wait_for_function('data&&window.Visuals&&Tracking.view',timeout=120000)
    page.locator('#precincts-tab').click();page.locator('#precinct-trends-tab').click()
-   expect(page.locator('#matrix th.matrix-total')).to_have_text('All Counties')
+   expect(page.locator('#matrix th.matrix-total:not(.matrix-selection-total)')).to_have_text('All Counties')
+   page.locator('#matrix-county-picker summary').click()
    original=check_column(page)
    for action in ['next','search','empty','county']:
     if action=='next':page.locator('#matrix-next').click()
@@ -53,6 +54,7 @@ def main():
     else:page.locator('#county').select_option('tarrant')
     assert check_column(page)==original,action
     expect(page.locator('#matrix th:nth-child(2)')).to_have_text('All Counties')
+   page.locator('#matrix-county-picker summary').click()
    REPORT['checks'].append('All-county vote sums and coverage persist through pagination, search, no matches and county selection')
    for mode in ['partisan','demographic','primary']:
     page.locator('#'+mode+'-mode').click()
@@ -81,14 +83,18 @@ def main():
    xml=page.evaluate('async()=>{const c=await Visuals.capture(Visuals.descriptor("matrix"));return decodeURIComponent(c.img.src.split(",").slice(1).join(","));}')
    export_text="".join(ET.fromstring(xml).itertext())
    assert all(label in export_text for label in headers),headers
-   page.locator('#matrix-search').fill('no such county qqq')
-   expect(page.locator('#matrix thead th')).to_have_count(2)
-   assert page.evaluate('()=>{const m=document.getElementById("matrix"),a=m.querySelector("th:first-child").getBoundingClientRect(),b=m.querySelector("th.matrix-total").getBoundingClientRect();return Math.abs(a.right-b.left)<1&&document.documentElement.scrollWidth<=innerWidth;}')
-   page.locator('#county').select_option('harris')
+   page.locator('#matrix-county-picker summary').click()
+   page.locator('#matrix-select-none').click()
    expect(page.locator('#matrix thead th')).to_have_count(3)
    assert page.evaluate('()=>{const m=document.getElementById("matrix"),a=m.querySelector("th:first-child").getBoundingClientRect(),b=m.querySelector("th.matrix-total").getBoundingClientRect();return Math.abs(a.right-b.left)<1&&document.documentElement.scrollWidth<=innerWidth;}')
+   page.locator('#county').select_option('harris')
+   expect(page.locator('#matrix thead th')).to_have_count(4)
+   assert page.evaluate('()=>{const m=document.getElementById("matrix"),a=m.querySelector("th:first-child").getBoundingClientRect(),b=m.querySelector("th.matrix-total").getBoundingClientRect();return Math.abs(a.right-b.left)<1&&document.documentElement.scrollWidth<=innerWidth;}')
    page.locator('#county').select_option('all')
+   page.locator('#matrix-select-none').click()
    page.locator('#matrix-search').fill('Harris')
+   page.get_by_role('checkbox',name='Harris',exact=True).check()
+   page.locator('#matrix-county-picker summary').click()
    with page.expect_download(timeout=60000) as download:page.locator('[data-image="matrix"]').click()
    path=OUT/'matrix-export.png';download.value.save_as(str(path))
    with Image.open(path) as image:assert (image.width == 1600 and 800 <= image.height <= 2000) and image.format=='PNG'

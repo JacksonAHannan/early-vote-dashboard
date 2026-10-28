@@ -32,7 +32,7 @@ with sync_playwright() as p:
   page.goto(BASE+'/#precinct-trends',wait_until='networkidle',timeout=180000)
   page.wait_for_function('data&&Tracking.view&&Visuals',timeout=120000)
   expect(page.locator('#matrix-measure')).to_have_value('cumulative')
-  baseline=page.locator('#matrix tbody .matrix-total').all_text_contents()
+  baseline=page.locator('#matrix tbody .matrix-total:not(.matrix-selection-total)').all_text_contents()
   for mode in ['partisan','demographic','primary','place']:
    page.locator('#'+mode+'-mode').click()
    if mode=='demographic':page.locator('#metric').select_option('non_white_vap')
@@ -56,13 +56,15 @@ with sync_playwright() as p:
   REPORT['checks'].append('All four classifications, both cohorts and days 1/3: daily pooled bins and CSV agree with independent Rust timeline analyzer')
   page.locator('#cohort').select_option('matched');page.locator('#partisan-mode').click()
   page.wait_for_function('matrixReady()')
-  pooled=page.locator('#matrix tbody .matrix-total').all_text_contents()
+  pooled=page.locator('#matrix tbody .matrix-total:not(.matrix-selection-total)').all_text_contents()
+  page.locator('#matrix-county-picker summary').click()
   page.locator('#matrix-search').fill('Harris')
-  assert page.locator('#matrix tbody .matrix-total').all_text_contents()==pooled
+  assert page.locator('#matrix tbody .matrix-total:not(.matrix-selection-total)').all_text_contents()==pooled
   page.locator('#county').select_option('tarrant');page.wait_for_function('matrixReady()')
-  assert page.locator('#matrix tbody .matrix-total').all_text_contents()==pooled
-  assert page.locator('#matrix thead th').all_text_contents()[1:]==['All Counties','TarrantCoverage note'] or page.locator('#matrix thead th').all_text_contents()[1:]==['All Counties','Tarrant']
+  assert page.locator('#matrix tbody .matrix-total:not(.matrix-selection-total)').all_text_contents()==pooled
+  assert page.locator('#matrix thead th').all_text_contents()[1:]==['All Counties','All Selected Counties','TarrantCoverage note'] or page.locator('#matrix thead th').all_text_contents()[1:]==['All Counties','All Selected Counties','Tarrant']
   page.locator('#county').select_option('all');page.wait_for_function('matrixReady()')
+  page.locator('#matrix-county-picker summary').click()
   REPORT['checks'].append('Daily All Counties stays global through search and a single-county selection')
   page.locator('[data-matrix-layout="joint"]').click()
   for metric in ['hispanic_vap','non_white_vap','place_type']:
@@ -104,7 +106,7 @@ with sync_playwright() as p:
    assert rows and all(r['measure']==basis for r in rows)
   # Day 7 initial reference must be unchanged after visiting daily views.
   page.get_by_role('button',name='Day '+str(page.evaluate('data.days')),exact=True).click();page.wait_for_function('matrixReady()')
-  assert page.locator('#matrix tbody .matrix-total').all_text_contents()==baseline
+  assert page.locator('#matrix tbody .matrix-total:not(.matrix-selection-total)').all_text_contents()==baseline
   for width in [1512,768,390]:
    page.set_viewport_size({'width':width,'height':1100});page.locator('#bucket-section').scroll_into_view_if_needed()
    assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')

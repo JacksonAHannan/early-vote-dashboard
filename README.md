@@ -9,6 +9,7 @@ Interactive 2026 early-vote turnout compared with the equivalent 2024 point, cov
 - Precinct and county comparisons use the largest supported matched geography independently for each day and daily/cumulative measure. Missing reports remain unknown.
 - Georgia opens with statewide voter race, with Age and Sex available. Published voter demographics remain separate from Census county composition.
 - Demographic regressions offer All, Trump and Harris 2024-winner cohorts, each with its own fit, sample size and exports. Auto focuses the vertical view on the main cluster; Full range reveals outliers while retaining them in the selected cohort's fit.
+- Precinct bucket tables offer searchable county checkboxes and whole-county Census demographic/place presets. **All Counties** and **All Selected Counties** stay pinned before individual counties. Selected totals sum matched votes across the entire selection, including other pages; CSV exports include all selected counties. County Census composition selects counties; the table still measures matched precincts.
 - Linked maps, future 2024 benchmarks, daily trends, collapsible panels, and individual PNG/CSV downloads remain available.
 
 Georgia covers all 159 counties; North Carolina all 100; Virginia all 133 localities through the attributed EPEC archive of ELECT aggregates. Nevada currently includes Clark and Washoe 2026 reports, with Clark's dated 2024 baseline. Precinct detail and classifications vary by state. Sources and scope qualifications are available inside the dashboard and in `sources/multistate/`.
@@ -51,7 +52,7 @@ Serve `site/` with a static HTTP server. No API server is required: Rust writes 
 
 ```bash
 cargo test --manifest-path dashboard/Cargo.toml --locked
-node --test dashboard/tests/regression-scale.test.cjs dashboard/tests/regression-cohort.test.cjs
+node --test dashboard/tests/regression-scale.test.cjs dashboard/tests/regression-cohort.test.cjs dashboard/tests/county-selection.test.cjs
 python3 -m unittest dashboard/tests/test_pages_state.py
 ```
 
