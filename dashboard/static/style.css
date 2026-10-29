@@ -29,7 +29,7 @@
 @media(max-width:600px){
  .section-heading>h2{order:0;max-width:calc(100% - 84px)}.section-heading>.panel-tools{order:1}.section-heading>div:not(.panel-tools){order:2;width:100%}
  .is-collapsed>.section-heading>h2{max-width:calc(100% - 40px)}
- .regression-heading>h2{order:0;max-width:calc(100% - 80px)}.regression-heading>.panel-tools{order:1}.regression-heading>.regression-actions{order:2;width:100%;justify-content:flex-end}
+ .regression-heading>h2{order:0;max-width:calc(100% - 90px)}.regression-heading>.panel-tools{order:1}.regression-heading>.regression-actions{order:2;width:100%;justify-content:flex-end}
  .panel-heading>select{order:0;flex:1;max-width:calc(100% - 80px)}.panel-heading>.panel-tools{order:1}.panel-heading>.map-actions{order:2;width:100%;margin-left:0}.map-actions select{flex:1;max-width:none}.map-actions button{display:block}
  .is-collapsed>.panel-heading>select{max-width:calc(100% - 40px)}
 }
