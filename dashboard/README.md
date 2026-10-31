@@ -390,3 +390,24 @@ Every hourly run rediscovers current native county publications and preserves ea
 Automatic image generation uses a frozen `*.qualification.json` companion written by Rust with each snapshot. It binds both independent controls and reviewed recovery proofs to `completeness_sha256`. `render_images.py` discovers the companion automatically (or accepts `--qualification PATH`) and rejects changed proofs. Exports retain `qualification.json` and the controls beside the images. Historical control-only snapshots retain the original strict hash path.
 
 Fresh source availability and repeatable collector verification are documented in [recurring collection reliability](../sources/refresh-reliability/). An empty/mail-only state export or unpublished county file is source unavailability, even after a successful HTTP request; it is never evidence of zero in-person votes.
+
+### October 30 source formats and rotating publications
+
+Dallas's rotating in-person download supports its reviewed Excel and CSV schemas.
+The CSV requires the general-election `NP` ballot scope and explicit vote dates.
+A conflicting identity withholds both affected date/precinct cells; blank
+identities retain the existing full-cell quarantine. Other cells and dates stay
+available. Names and addresses are never persisted.
+
+Washington supports the original five-column workbook and the reviewed
+six-column layout with residence precinct in column D. Waller, Washington and
+San Patricio retain native dated reports and request independent SOS reports for
+missing dates. A missing county file cannot suppress a valid same-date state
+report; missing state responses still remain unavailable.
+
+Denton and Collin distinguish a rotating cumulative workbook's publication date
+from each row's voting date. A newer official in-election workbook can supply
+explicitly dated rows through the requested completed cutoff. Current-day rows
+are excluded from observations and matching proofs; the filename cannot turn
+partial current-day turnout into a completed comparison. The existing hourly
+refresh and per-date matching rules remain unchanged.

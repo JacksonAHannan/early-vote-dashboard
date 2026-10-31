@@ -135,16 +135,30 @@ def xlsx_rows(raw):
 
 def parse_washington(raw, when):
     rows = []
+    layout = None
+    location = 'EV-EV Washington County Courthouse Annex'
     for row in xlsx_rows(raw):
-        if set(row) - set('ABCDE') or not row.get('B') or not row.get('C'):
+        if not row.get('B') or not row.get('C'):
             raise ValueError('Washington headerless workbook schema changed')
-        if row.get('D') != 'EV-EV Washington County Courthouse Annex':
+        if not set(row) - set('ABCDE') and row.get('D') == location:
+            current_layout, precinct = 'original', row['C']
+        elif (not set(row) - set('ABCDEF') and row.get('E') == location
+              and re.fullmatch(r'[PS]\s+\d+(?:\.\d+)?', row.get('D', ''))):
+            # The independently dated Oct28 publication adds one descriptive
+            # column before precinct. The exact reviewed EV location moves to
+            # E; full P/S residence codes are in D. Ignore descriptive fields,
+            # never infer a precinct from names, addresses or ballot styles.
+            current_layout, precinct = 'expanded', row['D']
+        else:
             raise ValueError('Washington source is not the reviewed early-voting location')
+        if layout is not None and current_layout != layout:
+            raise ValueError('Washington workbook mixes unreviewed column layouts')
+        layout = current_layout
         identifier = row.get('A', '')
         if identifier and not re.fullmatch(r'\d{10}', identifier):
             raise ValueError('Washington identifier format changed')
         # P/S prefixes and split suffixes are deliberately retained here.
-        rows.append((identifier, row['C']))
+        rows.append((identifier, precinct))
     if not rows:
         raise ValueError('empty Washington roster is not confirmed zero')
     return rows

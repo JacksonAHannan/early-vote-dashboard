@@ -1,5 +1,6 @@
 //! Correct known source selection gaps without weakening absence-as-unknown rules.
 use serde_json::json;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::{collections::BTreeMap, path::PathBuf};
 use texas_turnout::{Counts, Daily, Group, Reference, matching, quality};
 const BAD: &str = "b070ed9b8064425482f7fc9cee62ac801d2c3fd913a4376ae60fb4b8eaac7d49";
@@ -26,9 +27,11 @@ fn source(county: &str, year: i32, values: &[(&str, u64)]) -> Daily {
     }
 }
 fn fixture(recovered: &Daily, supersedes: Vec<&str>, expected: u64) -> Fixture {
+    static FIXTURE_ID: AtomicU64 = AtomicU64::new(0);
     let root = std::env::temp_dir().join(format!(
-        "turnout-source-recovery-{}-{}",
+        "turnout-source-recovery-{}-{}-{}",
         std::process::id(),
+        FIXTURE_ID.fetch_add(1, Ordering::Relaxed),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()

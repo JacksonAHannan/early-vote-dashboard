@@ -25,13 +25,15 @@ def vote_date(value):
  if re.fullmatch(r'\d{5}(?:\.\d+)?',value):return date(1899,12,30)+timedelta(days=int(float(value)))
  raise ValueError('unrecognized county vote date')
 
-def aggregate(rows,cutoff,source,sha256,retrieved_at):
+def aggregate(rows,cutoff,source,sha256,retrieved_at,completed_through=None):
  rows=iter(rows)
  header=next(rows,None)
  # The county removed its empty report-layout Textbox51 column on Oct27.
  # All eight analytical columns remain mandatory with their exact meanings.
  if header not in [HEADER,{k:v for k,v in HEADER.items() if k!='I'}]:raise ValueError('Collin workbook schema changed')
  if not date(2026,10,19)<=cutoff<=date(2026,10,30):raise ValueError('cutoff outside reviewed election calendar')
+ completed=min(cutoff,completed_through or cutoff)
+ if not date(2026,10,19)<=completed<=date(2026,10,30):raise ValueError('completed cutoff outside reviewed election calendar')
  counts=defaultdict(Counter);identities={};quarantine=set();dates=set();ordinary=Counter();provisional=Counter();duplicates=Counter();blank=Counter()
  for r in rows:
   if set(r)-set(HEADER):raise ValueError('unexpected county workbook columns')
@@ -51,21 +53,23 @@ def aggregate(rows,cutoff,source,sha256,retrieved_at):
  if not dates:raise ValueError('no ordinary observations; not a confirmed zero roster')
  output=[]
  for when in sorted(dates):
+  if when>completed:continue
   for d,p in quarantine:
    if d==when:counts[when].pop(p,None)
   unavailable=sorted(p for d,p in quarantine if d==when)
-  output.append({'county':'collin','date':str(when),'counts':dict(sorted(counts[when].items())),'complete':False,'cumulative':False,'unavailable_precincts':unavailable,'source':source,'sha256':sha256,'retrieved_at':retrieved_at,'note':f'Official Collin dated ordinary Regular early in-person residence-precinct workbook through {cutoff}; Provisional rows excluded. Raw voter identities processed only in memory, globally deduplicated; blank/conflicting identity cells withheld. {ordinary[when]} ordinary source rows; {provisional[when]} provisional rows excluded; {duplicates[when]} repeated ordinary identities; {blank[when]} blank ordinary identities. Omitted precincts are unknown; no zero inference.'})
+  output.append({'county':'collin','date':str(when),'counts':dict(sorted(counts[when].items())),'complete':False,'cumulative':False,'unavailable_precincts':unavailable,'source':source,'sha256':sha256,'retrieved_at':retrieved_at,'note':f'Official Collin dated ordinary Regular early in-person residence-precinct workbook edition dated {cutoff}; observations limited to completed dates through {completed}; Provisional rows excluded. Raw voter identities processed only in memory, globally deduplicated across the publication including later dated rows; blank/conflicting identity cells withheld. {ordinary[when]} ordinary source rows; {provisional[when]} provisional rows excluded; {duplicates[when]} repeated ordinary identities; {blank[when]} blank ordinary identities. Omitted precincts are unknown; no zero inference.'})
+ if not output:raise ValueError('no ordinary observations within completed cutoff')
  return output
 
-def discover_workbooks(html,through,strict_latest=False):
+def discover_workbooks(html,through,strict_latest=False,include_later_publications=False):
  candidates=defaultdict(set)
  for href in re.findall(r'href=["\']([^"\']+)',html,re.I):
   u=urljoin(LANDING,href.replace('&amp;','&'));p=urlparse(unquote(u))
   if p.hostname!='www.collincountytx.gov':continue
-  m=re.fullmatch(r'.*/early-voters-through-october-(\d{1,2})-2026\.xlsx',p.path,re.I)
+  m=re.fullmatch(r'.*/early-(?:voters|voting)-through-october-(\d{1,2})-2026\.xlsx',p.path,re.I)
   if m and 19<=int(m[1])<=30:
    cutoff=date(2026,10,int(m[1]))
-   if cutoff<=through:candidates[cutoff].add(u)
+   if cutoff<=through or include_later_publications:candidates[cutoff].add(u)
  if not candidates:raise ValueError('no dated county workbook link within requested cutoff')
  if strict_latest and len(candidates[max(candidates)])!=1:raise ValueError('ambiguous county workbook links for latest cutoff')
  return [(cutoff,next(iter(urls))) for cutoff,urls in sorted(candidates.items(),reverse=True) if len(urls)==1]
@@ -78,11 +82,14 @@ def discover(html,through):
 
 def collect(through,downloader=download):
  through=min(through,datetime.now(ZoneInfo('America/Chicago')).date()-timedelta(days=1))
- workbooks=discover_workbooks(downloader(LANDING).decode(),through)
+ # The rotating cumulative workbook may already contain today's check-ins.
+ # Explicit vote dates allow earlier completed observations to be recovered;
+ # the publication filename never makes active-day observations complete.
+ workbooks=discover_workbooks(downloader(LANDING).decode(),through,include_later_publications=True)
  for cutoff,url in workbooks:
   try:
    raw=downloader(url)
-   return aggregate(xlsx_rows(raw),cutoff,url,hashlib.sha256(raw).hexdigest(),datetime.now(timezone.utc).isoformat())
+   return aggregate(xlsx_rows(raw),cutoff,url,hashlib.sha256(raw).hexdigest(),datetime.now(timezone.utc).isoformat(),completed_through=through)
   except Exception as error:
    print(json.dumps({'county':'collin','date':str(cutoff),'status':'unavailable','error':type(error).__name__}),file=sys.stderr)
  raise ValueError('no usable completed Collin workbook publication')

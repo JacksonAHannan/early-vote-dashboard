@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import sys
 from urllib.parse import unquote, urljoin, urlparse
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import collect_county_native as native
@@ -36,7 +37,13 @@ def discover_cameron(html, through):
 
 
 def discover_denton(html, through):
-    return discover_file(html, through, DENTON_LANDING,
+    if not FIRST <= through <= LAST:
+        raise ValueError('Denton cutoff outside reviewed election calendar')
+    # Denton replaces its only linked cumulative workbook each day. Its
+    # publication date can be later than the requested observation cutoff;
+    # the explicit Time column, checked below, determines included vote dates.
+    published = min(datetime.now(ZoneInfo('America/Chicago')).date(), LAST)
+    return discover_file(html, published, DENTON_LANDING,
         r'/wp-content/uploads/2026/\d{2}/1126_(\d{1,2}-\d{1,2})_Early-Voting-Roster\.xlsx', '%m-%d')
 
 
@@ -150,9 +157,12 @@ def collect_cameron(through, downloader=download):
     return aggregate_cameron(xlsx_rows(raw), cutoff, source, hashlib.sha256(raw).hexdigest(), datetime.now(timezone.utc).isoformat())
 
 
-def parse_denton(rows, through, source, sha256):
+def parse_denton(rows, through, source, sha256, published_through=None):
     if not FIRST <= through <= LAST:
         raise ValueError('Denton cutoff outside reviewed election calendar')
+    published_through = published_through or through
+    if not FIRST <= published_through <= LAST:
+        raise ValueError('Denton publication outside reviewed election calendar')
     rows = iter(rows)
     if next(rows, None) != DENTON_HEADER:
         raise ValueError('Denton in-person workbook schema changed')
@@ -171,8 +181,10 @@ def parse_denton(rows, through, source, sha256):
             when = date(1899, 12, 30) + timedelta(days=int(serial))
         except (ValueError, InvalidOperation, OverflowError) as error:
             raise ValueError('Denton row has no usable explicit voting date') from error
-        if not FIRST <= when <= through:
+        if not FIRST <= when <= published_through:
             raise ValueError('Denton row date outside published workbook window')
+        if when > through:
+            continue
         raw_precinct = row.get('E', '').strip().upper()
         precinct = str(int(raw_precinct)) if raw_precinct.isdigit() else raw_precinct or 'UNASSIGNED'
         identity = row.get('B', '').strip()
@@ -232,15 +244,17 @@ def denton_aliases(files, universe, downloader):
 
 
 def collect_denton(through, downloader=download):
+    through = min(through, datetime.now(ZoneInfo('America/Chicago')).date() - timedelta(days=1))
     cutoff, source = discover_denton(downloader(DENTON_LANDING).decode(), through)
     raw = downloader(source)
     raw_hash = hashlib.sha256(raw).hexdigest()
-    files = parse_denton(xlsx_rows(raw), cutoff, source, raw_hash)
+    files = parse_denton(xlsx_rows(raw), through, source, raw_hash, published_through=cutoff)
     reference = json.loads((Path(__file__).resolve().parents[1] / 'data/reference.json').read_text())
     county = next(item for item in reference if item['id'] == 'denton')
     universe = {p for group in county['groups'] for p in group['new']}
     aliases, targets, manifests = denton_aliases(files, universe, downloader)
-    manifest = dict(method='denton-all-date-exact-identity-alias-v1', native_source=source, native_sha256=raw_hash, identity_sources=manifests)
+    manifest = dict(method='denton-all-date-exact-identity-alias-v2', native_source=source, native_sha256=raw_hash,
+                    publication_date=str(cutoff), observation_cutoff=str(through), identity_sources=manifests)
     evidence = json.dumps(manifest, sort_keys=True, separators=(',', ':'))
     digest = hashlib.sha256(evidence.encode()).hexdigest()
     for file in files.values():
@@ -257,6 +271,7 @@ def collect_denton(through, downloader=download):
         daily['note'] += (' Official Denton Daily In-Person Early Voting Roster rediscovered on each refresh. Explicit Excel Time dates. '
             'Full residence subdivision labels are mapped only using globally unique native identities and same-date official SOS identities; '
             'every available date is rechecked for conflicting or foreign targets. No label truncation. '
+            f'Workbook publication {cutoff}; only explicit completed voting dates through {through} are included. '
             f'Native workbook SHA256 {raw_hash}; derived SHA256 binds all dated exact-identity proof hashes. Separate limited/provisional flags unavailable.')
     if not any(p in universe and value > 0 for daily in output for p, value in daily['counts'].items()):
         raise ValueError('Denton native source has no exact-identity-proved native precincts')

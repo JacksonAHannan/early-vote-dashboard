@@ -72,6 +72,7 @@ fn date(value: &str) -> Result<NaiveDate> {
         "%m.%d.%Y",
         "%Y-%m-%d %H:%M:%S",
         "%m/%d/%Y %H:%M:%S",
+        "%m/%d/%Y %H:%M",
     ] {
         if let Ok(d) = NaiveDate::parse_from_str(value, format) {
             return Ok(d);
@@ -575,9 +576,9 @@ async fn tarrant(client: &reqwest::Client, reference: &Reference, n: u32) -> Res
     Ok(days)
 }
 
-// A native alternative fills a missing date; it never displaces a usable state
-// report or borrows observations from another date.
-fn fill_missing_native_dates(values: &mut Vec<Daily>, native: Vec<Daily>) {
+// An independent alternative fills only a missing date; it never displaces an
+// existing report or borrows observations from another date.
+fn fill_missing_dates(values: &mut Vec<Daily>, native: Vec<Daily>) {
     for source in native {
         if !values
             .iter()
@@ -677,7 +678,7 @@ async fn panola(client: &reqwest::Client, reference: &Reference, n: u32) -> Resu
     }
     if values.len() < n as usize {
         match native_county("panola", n).await {
-            Ok(native) => fill_missing_native_dates(&mut values, native),
+            Ok(native) => fill_missing_dates(&mut values, native),
             Err(error) => eprintln!("Panola native missing-date fallback: {error}"),
         }
     }
@@ -730,6 +731,42 @@ async fn large_county(
     Ok(values)
 }
 
+async fn native_with_state_fallback(
+    client: &reqwest::Client,
+    reference: &Reference,
+    n: u32,
+) -> Result<Vec<Daily>> {
+    let mut values = match native_county(&reference.id, n).await {
+        Ok(values) => values,
+        Err(error) => {
+            eprintln!(
+                "{} native roster: {error:#}; trying independent dated SOS sources",
+                reference.name
+            );
+            Vec::new()
+        }
+    };
+    let mut identities = BTreeSet::new();
+    for offset in 0..n {
+        let date = start(2026) + chrono::Duration::days(i64::from(offset));
+        if !values
+            .iter()
+            .any(|value| value.date == date && !value.cumulative)
+        {
+            match crate::fetch::fetch_state(client, reference, date, &mut identities).await {
+                Ok(value) => fill_missing_dates(&mut values, vec![value]),
+                Err(error) => eprintln!("{} dated SOS {date}: {error:#}", reference.name),
+            }
+        }
+    }
+    ensure!(
+        !values.is_empty(),
+        "no usable {} native or dated SOS observations",
+        reference.name
+    );
+    Ok(values)
+}
+
 pub async fn collect(
     client: &reqwest::Client,
     r: &Reference,
@@ -751,7 +788,9 @@ pub async fn collect(
         "montgomery" => montgomery(client, r, year, n).await,
         "hays" if year == 2026 => hays(client, r, n).await,
         "ellis" if year == 2026 => ellis(client, r, n).await,
-        "waller" | "washington" | "sanpatricio" if year == 2026 => native_county(&r.id, n).await,
+        "waller" | "washington" | "sanpatricio" if year == 2026 => {
+            native_with_state_fallback(client, r, n).await
+        }
         _ => bail!("no county adapter"),
     }
 }
@@ -958,6 +997,126 @@ fn link(html: &str, needle: &str, base: &str) -> Result<String> {
     }
     bail!("county roster link not found on election page")
 }
+
+fn dallas_source_rows(raw: Vec<u8>) -> Result<Vec<Vec<String>>> {
+    // The county changed its rotating in-person download from XLSX to CSV on
+    // October 29. Both formats must use the same date/identity/quarantine path.
+    if raw.starts_with(b"PK\x03\x04") || raw.starts_with(b"\xd0\xcf\x11\xe0") {
+        return workbook(raw);
+    }
+    let mut reader = csv::ReaderBuilder::new()
+        .trim(csv::Trim::All)
+        .from_reader(raw.as_slice());
+    let columns: Vec<_> = reader
+        .headers()?
+        .iter()
+        .map(|h| h.trim_start_matches('\u{feff}').to_string())
+        .collect();
+    let expected = [
+        "FIRSTNAME",
+        "MIDDLENAME",
+        "LASTNAME",
+        "STREETNUMBER",
+        "STREETPREDIR",
+        "STREETNAME",
+        "STREETTYPE",
+        "STREETPOSTDIR",
+        "UNIT",
+        "CITY",
+        "ZIP",
+        "PRECINCT",
+        "PRECINCT_SUB",
+        "BALLOTSTYLE",
+        "BALLOT_PARTY",
+        "DATE_VOTED",
+        "VOTING_UNIT",
+        "VOTING_SUBUNIT",
+        "SOS_VOTERID",
+    ];
+    ensure!(
+        columns.len() == expected.len()
+            && expected
+                .iter()
+                .all(|name| columns.iter().filter(|h| h.as_str() == *name).count() == 1),
+        "Dallas in-person CSV schema changed or invalid response body"
+    );
+    let selected = ["DATE_VOTED", "PRECINCT", "SOS_VOTERID"]
+        .map(|name| columns.iter().position(|h| h == name).unwrap());
+    let party = columns.iter().position(|h| h == "BALLOT_PARTY").unwrap();
+    // Retain only the three analytical fields in memory; names/addresses never
+    // enter the aggregate parser or its optional exact-identity enrichment.
+    let mut rows = vec![vec![
+        "DATE VOTED".into(),
+        "PRECINCT".into(),
+        "SOS VOTERID".into(),
+    ]];
+    for record in reader.records() {
+        let record = record?;
+        ensure!(
+            &record[party] == "NP",
+            "Dallas general-election CSV has unexpected ballot-party scope"
+        );
+        rows.push(selected.iter().map(|i| record[*i].to_string()).collect());
+    }
+    ensure!(
+        rows.len() > 1,
+        "Dallas CSV has no ordinary voter observations"
+    );
+    Ok(rows)
+}
+
+fn dallas_csv_roster(
+    rows: &[Vec<String>],
+    year: i32,
+    n: u32,
+) -> Result<(CountyRoster, BTreeMap<NaiveDate, BTreeSet<String>>)> {
+    let (first, headers) = header(rows, &["DATE VOTED", "PRECINCT", "SOS VOTERID"])?;
+    let mut seen = Voters::new();
+    let mut quarantine = BTreeMap::<NaiveDate, BTreeSet<String>>::new();
+    // A revised native CSV may contradict an earlier date in the same edition.
+    // Inspect all dated rows before counting; never arbitrarily keep one side.
+    for row in rows.iter().skip(first + 1) {
+        let raw_date = field(row, &headers, "DATE VOTED");
+        let id = field(row, &headers, "SOS VOTERID");
+        if raw_date.is_empty() || id.is_empty() {
+            continue;
+        }
+        let day = date(raw_date)?;
+        let p = normalize(field(row, &headers, "PRECINCT"));
+        let p = if p.is_empty() { "UNASSIGNED".into() } else { p };
+        if let Some((previous_day, previous_precinct)) = seen.get(id) {
+            if *previous_day != day || previous_precinct != &p {
+                quarantine
+                    .entry(*previous_day)
+                    .or_default()
+                    .insert(previous_precinct.clone());
+                quarantine.entry(day).or_default().insert(p);
+            }
+        } else {
+            seen.insert(id.into(), (day, p));
+        }
+    }
+    drop(seen);
+    let mut roster = CountyRoster::default();
+    for row in rows.iter().skip(first + 1) {
+        let raw_date = field(row, &headers, "DATE VOTED");
+        if raw_date.is_empty() {
+            continue;
+        }
+        let day = date(raw_date)?;
+        if day < start(year) || day >= start(year) + chrono::Duration::days(i64::from(n)) {
+            continue;
+        }
+        let p = normalize(field(row, &headers, "PRECINCT"));
+        let p = if p.is_empty() { "UNASSIGNED".into() } else { p };
+        if quarantine.get(&day).is_some_and(|cells| cells.contains(&p)) {
+            continue;
+        }
+        roster.record(field(row, &headers, "SOS VOTERID"), day, &p, false)?;
+    }
+    Ok((roster, quarantine))
+}
+
 async fn dallas(client: &reqwest::Client, r: &Reference, year: i32, n: u32) -> Result<Vec<Daily>> {
     let page = if year == 2026 {
         "https://www.dallascountyvotes.org/election-results/historical/november-3-2026-general-and-joint-election/"
@@ -969,8 +1128,13 @@ async fn dallas(client: &reqwest::Client, r: &Reference, year: i32, n: u32) -> R
     let url = link(&html, "in-person early", page)?;
     let raw = download(client, &url, None).await?;
     let hash = format!("{:x}", Sha256::digest(&raw));
-    let rows = workbook(raw)?;
-    let mut roster = dallas_rows(&rows, year, n)?;
+    let csv_source = !raw.starts_with(b"PK\x03\x04") && !raw.starts_with(b"\xd0\xcf\x11\xe0");
+    let rows = dallas_source_rows(raw)?;
+    let (mut roster, csv_quarantine) = if csv_source {
+        dallas_csv_roster(&rows, year, n)?
+    } else {
+        (dallas_rows(&rows, year, n)?, BTreeMap::new())
+    };
     let proofs = if year == 2026 {
         dallas_recover_precincts(client, r, &rows, &mut roster, year, n)
             .await
@@ -987,6 +1151,13 @@ async fn dallas(client: &reqwest::Client, r: &Reference, year: i32, n: u32) -> R
         "County cumulative in-person workbook, filtered by DATE VOTED and residence PRECINCT. Unique voter IDs; blanks remain unassigned. Source totals are checked against independently dated county controls; unsupported cells remain unavailable.",
     )?;
     for day in &mut days {
+        if let Some(cells) = csv_quarantine.get(&day.date) {
+            day.unavailable_precincts.extend(cells.iter().cloned());
+            day.unavailable_precincts.sort();
+            day.unavailable_precincts.dedup();
+            day.counts.retain(|p, _| !cells.contains(p));
+            day.note.push_str(&format!(" Conflicting-ID quarantine: {} complete date/precinct cells withheld on {} because a native CSV identity disagrees with another date or residence precinct in this edition. Both sides of each conflict remain unavailable, never zero.", cells.len(), day.date));
+        }
         if let Some((source, sos_hash, recovered)) = proofs.get(&day.date) {
             let manifest = serde_json::json!({"method":"unique-exact-voter-identity-precinct-enrichment-v1",
                 "native_sha256":hash,"same_date_sos_sha256":sos_hash});
@@ -1192,7 +1363,7 @@ mod tests {
         missing.date = start(2026) + chrono::Duration::days(1);
         missing.unavailable_precincts = vec!["2".into()];
         let mut values = vec![state.clone()];
-        fill_missing_native_dates(&mut values, vec![missing.clone(), redundant]);
+        fill_missing_dates(&mut values, vec![missing.clone(), redundant]);
         assert_eq!(values.len(), 2);
         assert_eq!(values[0].source, state.source);
         assert_eq!(values[0].counts, state.counts);
@@ -1482,6 +1653,84 @@ mod tests {
         assert!(days[0].note.contains("1 rows with blank identifiers"));
         assert_eq!(days[1].counts, Counts::from([("1".into(), 1)]));
         assert!(!days[1].note.contains("blank identifiers"));
+    }
+
+    #[test]
+    fn dallas_rotating_native_csv_reuses_date_identity_and_quarantine_rules() {
+        let raw = b"\xef\xbb\xbfFIRSTNAME,MIDDLENAME,LASTNAME,STREETNUMBER,STREETPREDIR,STREETNAME,STREETTYPE,STREETPOSTDIR,UNIT,CITY,ZIP,PRECINCT,PRECINCT_SUB,BALLOTSTYLE,BALLOT_PARTY,DATE_VOTED,VOTING_UNIT,VOTING_SUBUNIT,SOS_VOTERID\nSynthetic,,Person,,,,,,,,,001,,,NP,10/19/2026 7:01,,,1000000001\nSynthetic,,Blank,,,,,,,,,001,,,NP,10/19/2026,,,\nSynthetic,,Good,,,,,,,,,002,,,NP,10/19/2026,,,1000000002\nSynthetic,,Recover,,,,,,,,,,,,NP,10/20/2026,,,1000000003\nSynthetic,,Future,,,,,,,,,003,,,NP,10/30/2026,,,1000000004\n";
+        let rows = dallas_source_rows(raw.to_vec()).unwrap();
+        assert_eq!(rows[0], vec!["DATE VOTED", "PRECINCT", "SOS VOTERID"]);
+        assert!(rows.iter().all(|r| r.len() == 3));
+        let days = dallas_rows(&rows, 2026, 2)
+            .unwrap()
+            .days(&roster_reference(), 2026, 2, "official", "hash", "scope")
+            .unwrap();
+        assert_eq!(days[0].counts, Counts::from([("2".into(), 1)]));
+        assert_eq!(days[0].unavailable_precincts, vec!["1"]);
+        assert_eq!(days[1].counts, Counts::from([("UNASSIGNED".into(), 1)]));
+        assert_eq!(
+            dallas_blank_candidates(&rows, 2026, 2).unwrap(),
+            BTreeMap::from([(
+                start(2026) + chrono::Duration::days(1),
+                BTreeSet::from(["1000000003".into()])
+            )])
+        );
+    }
+
+    #[test]
+    fn dallas_source_rejects_html_partial_csv_and_foreign_schema() {
+        for raw in [
+            b"<html>Challenge</html>".as_slice(),
+            b"DATE_VOTED,PRECINCT\n10/19/2026,1\n",
+            b"FIRSTNAME,DATE_VOTED,PRECINCT,SOS_VOTERID\nSynthetic,10/19/2026,1,1000000001\n",
+        ] {
+            assert!(dallas_source_rows(raw.to_vec()).is_err());
+        }
+    }
+
+    #[test]
+    fn dallas_csv_requires_general_election_ballot_party_scope() {
+        let csv = "FIRSTNAME,MIDDLENAME,LASTNAME,STREETNUMBER,STREETPREDIR,STREETNAME,STREETTYPE,STREETPOSTDIR,UNIT,CITY,ZIP,PRECINCT,PRECINCT_SUB,BALLOTSTYLE,BALLOT_PARTY,DATE_VOTED,VOTING_UNIT,VOTING_SUBUNIT,SOS_VOTERID\nSynthetic,,Person,,,,,,,,,001,,,NP,10/19/2026 7:01,,,1000000001\n";
+        assert!(dallas_source_rows(csv.as_bytes().to_vec()).is_ok());
+        for party in ["DEM", "REP", ""] {
+            assert!(
+                dallas_source_rows(csv.replace(",NP,", &format!(",{party},")).into_bytes())
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn dallas_csv_conflict_quarantines_both_whole_cells_without_weakening_workbooks() {
+        let rows: Vec<Vec<String>> = [
+            ["DATE VOTED", "PRECINCT", "SOS VOTERID"],
+            ["10/21/2026 7:01", "4079", "1000000001"],
+            ["10/21/2026 7:02", "4079", "1000000002"],
+            ["10/21/2026 7:03", "4080", "1000000003"],
+            ["10/28/2026 7:01", "3081", "1000000001"],
+            ["10/28/2026 7:02", "3081", "1000000004"],
+            ["10/28/2026 7:03", "3082", "1000000005"],
+        ]
+        .into_iter()
+        .map(|row| row.into_iter().map(String::from).collect())
+        .collect();
+        assert!(dallas_rows(&rows, 2026, 11).is_err());
+        let (roster, quarantine) = dallas_csv_roster(&rows, 2026, 11).unwrap();
+        let third = start(2026) + chrono::Duration::days(2);
+        let tenth = start(2026) + chrono::Duration::days(9);
+        assert_eq!(
+            quarantine,
+            BTreeMap::from([
+                (third, BTreeSet::from(["4079".into()])),
+                (tenth, BTreeSet::from(["3081".into()]))
+            ])
+        );
+        let days = roster
+            .days(&roster_reference(), 2026, 11, "official", "hash", "scope")
+            .unwrap();
+        assert_eq!(days.len(), 2);
+        assert_eq!(days[0].counts, Counts::from([("4080".into(), 1)]));
+        assert_eq!(days[1].counts, Counts::from([("3082".into(), 1)]));
     }
 
     #[test]
