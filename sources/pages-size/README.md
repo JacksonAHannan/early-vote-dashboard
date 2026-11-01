@@ -21,9 +21,14 @@ changes and new dependencies remain outside scope.
   routes and all artifact content hashes. Retain source identity and measurements.
 - [x] Run affected Rust checks and browser decompression acceptance. Record
   evidence and the remaining publication step.
-- [ ] Commit and push the verified repair to the publication branch.
-- [ ] Complete the GitHub publication workflow and refresh official sources.
-- [ ] Verify the deployed size, timestamp and browser behavior.
+- [x] Commit and push the verified repair to the publication branch.
+  Commit `3c26aa24681c8643f63bf20298b87a923761dd16` is on `main`.
+  Push-triggered publication `41337556957` was superseded by the explicitly
+  dispatched source-refresh/publication run `41337574620`. The duplicate
+  retained-data build was canceled to avoid exporting twice before publishing
+  fresh source observations. Collection and deployment workflow code is unchanged.
+- [x] Complete the GitHub publication workflow and refresh official sources.
+- [x] Verify the deployed size, timestamp and browser behavior.
 
 Acceptance: the retained release exports below 900 MB with identical response
 content and routes; the compression regression and affected checks pass. The
@@ -94,5 +99,27 @@ decoded 15 representative API selections including maps and precinct detail,
 loaded all four other state dashboards, downloaded Texas CSV content and
 checked the 390px layout.
 
-Local repair and verification are complete. Authorized publication is in
-progress; GitHub deployment and live verification remain to be recorded.
+## Deployed verification
+
+The authorized refreshed publication completed successfully in
+[run 41337574620](https://github.com/JacksonAHannan/early-vote-dashboard/actions/runs/41337574620),
+using repair commit
+[`3c26aa2`](https://github.com/JacksonAHannan/early-vote-dashboard/commit/3c26aa24681c8643f63bf20298b87a923761dd16).
+Official-source refresh, static export, size validation, aggregate retention and
+Pages deployment all succeeded. The refreshed site measured 547,288,407 bytes;
+its 5,938 compressed API artifacts occupy 545,659,875 bytes. The workflow retained
+1,511 validated aggregate files for subsequent refreshes.
+
+Public verification at 2026-11-01T18:53:06Z confirmed generation timestamp
+`2026-11-01T18:44:02.898263752+00:00` and revision
+`6dcec119b4b9b99dbbedc3015c943c537775ebd6b8f5d4d86ebcdaa5c9470653`.
+The downloaded manifest matches its revision hash, and its compressed Texas data
+matches the content-addressed payload hash. The Texas completed-voting cutoff
+remains October 30, with all 248 reference counties; a new publication timestamp
+does not imply new voting dates.
+
+`python3 analysis/pages-size/check_live_publication.py` passed, as did all 22
+checks in `uv run --with playwright python analysis/pages-size/check_live.py`
+against the public URL, with no JavaScript errors. Evidence is retained in
+`analysis/pages-size/live-publication.json` and `live-browser.json`.
+Repair, refreshed deployment and live verification are complete.
