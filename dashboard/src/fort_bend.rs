@@ -116,7 +116,15 @@ fn day(value: &str) -> Result<NaiveDate> {
     bail!("Fort Bend unrecognized check-in date")
 }
 
-fn rows_to_counts(rows: &[Vec<String>], year: i32) -> Result<BTreeMap<NaiveDate, Counts>> {
+#[derive(Default)]
+struct NativeRoster {
+    counts: BTreeMap<NaiveDate, Counts>,
+    reported_rows: BTreeMap<NaiveDate, u64>,
+    unavailable_precincts: BTreeMap<NaiveDate, BTreeSet<String>>,
+    invalid_rows: BTreeMap<NaiveDate, u64>,
+}
+
+fn rows_to_counts(rows: &[Vec<String>], year: i32) -> Result<NativeRoster> {
     let required = ["VUID", "Name", "Check-in Date", "Precinct"];
     let (offset, header) = rows
         .iter()
@@ -124,26 +132,25 @@ fn rows_to_counts(rows: &[Vec<String>], year: i32) -> Result<BTreeMap<NaiveDate,
         .enumerate()
         .find(|(_, row)| required.iter().all(|field| row.iter().any(|s| s == field)))
         .context("Fort Bend roster headers changed")?;
+    ensure!(
+        required
+            .iter()
+            .all(|field| header.iter().filter(|s| *s == field).count() == 1),
+        "Fort Bend roster headers ambiguous"
+    );
     let indexes: Vec<_> = required
         .iter()
         .map(|field| header.iter().position(|s| s == field).unwrap())
         .collect();
     let mut ids = BTreeSet::new();
-    let mut result: BTreeMap<NaiveDate, Counts> = BTreeMap::new();
+    let mut result = NativeRoster::default();
     for row in rows.iter().skip(offset + 1) {
         if row.iter().all(|s| s.is_empty()) {
             continue;
         }
         let field = |i: usize| row.get(indexes[i]).map(String::as_str).unwrap_or("");
-        ensure!(
-            (8..=10).contains(&field(0).len()) && field(0).bytes().all(|b| b.is_ascii_digit()),
-            "Fort Bend invalid voter identifier"
-        );
-        ensure!(
-            ids.insert(field(0).to_string()),
-            "Fort Bend duplicate voter identifier"
-        );
-        ensure!(!field(1).is_empty(), "Fort Bend blank voter name");
+        // A date that cannot be located inside this election cannot be safely
+        // isolated. Keep schema/date failures fatal even for an invalid identity.
         let date = day(field(2))?;
         ensure!(
             date >= start(year) && date < start(year) + Duration::days(12),
@@ -155,9 +162,45 @@ fn rows_to_counts(rows: &[Vec<String>], year: i32) -> Result<BTreeMap<NaiveDate,
         } else {
             precinct
         };
-        *result.entry(date).or_default().entry(precinct).or_default() += 1;
+        *result.reported_rows.entry(date).or_default() += 1;
+        // Share one identity set across the entire workbook. A duplicate can
+        // affect a different date/precinct and must never be admitted twice.
+        if !field(0).is_empty() {
+            ensure!(
+                ids.insert(field(0).to_string()),
+                "Fort Bend duplicate voter identifier"
+            );
+        }
+        if !(8..=10).contains(&field(0).len())
+            || !field(0).bytes().all(|b| b.is_ascii_digit())
+            || field(1).is_empty()
+        {
+            *result.invalid_rows.entry(date).or_default() += 1;
+            result
+                .unavailable_precincts
+                .entry(date)
+                .or_default()
+                .insert(precinct);
+            continue;
+        }
+        *result
+            .counts
+            .entry(date)
+            .or_default()
+            .entry(precinct)
+            .or_default() += 1;
     }
-    ensure!(!ids.is_empty(), "Fort Bend empty voter roster");
+    // Remove the complete implicated cell, including valid rows encountered
+    // before or after its invalid row. It remains unknown rather than zero.
+    for (date, cells) in &result.unavailable_precincts {
+        if let Some(counts) = result.counts.get_mut(date) {
+            counts.retain(|precinct, _| !cells.contains(precinct));
+        }
+    }
+    ensure!(
+        result.counts.values().any(|counts| !counts.is_empty()),
+        "Fort Bend empty usable voter roster"
+    );
     Ok(result)
 }
 
@@ -203,6 +246,7 @@ fn control_totals(text: &str, year: i32) -> Result<BTreeMap<NaiveDate, u64>> {
 fn availability_notes(
     roster: &BTreeMap<NaiveDate, Counts>,
     controls: &BTreeMap<NaiveDate, u64>,
+    reported_rows: &BTreeMap<NaiveDate, u64>,
     year: i32,
     n: u32,
 ) -> Result<BTreeMap<NaiveDate, String>> {
@@ -221,6 +265,7 @@ fn availability_notes(
         };
         let note = (|| -> Result<String> {
             let actual: u64 = counts.values().sum();
+            let native_rows = reported_rows.get(&date).copied().unwrap_or(actual);
             ensure!(
                 actual > 0,
                 "Fort Bend empty dated roster cannot establish a reported zero"
@@ -231,8 +276,8 @@ fn availability_notes(
                     "Fort Bend dated roster conflicts with a zero/future county control on {date}"
                 );
                 ensure!(
-                    actual <= *control || actual.abs_diff(*control) <= 1,
-                    "Fort Bend roster exceeds official in-person daily control on {date}: {actual} records versus {control} ballots"
+                    native_rows <= *control || native_rows.abs_diff(*control) <= 1,
+                    "Fort Bend roster exceeds official in-person daily control on {date}: {native_rows} records versus {control} ballots"
                 );
                 format!(
                     "Daily roster {actual}; county in-person control {control}; control minus roster {}",
@@ -350,18 +395,30 @@ pub async fn collect(
         .rows()
         .map(|row| row.iter().map(value).collect())
         .collect();
-    let mut counts = rows_to_counts(&rows, year)?;
+    let mut roster = rows_to_counts(&rows, year)?;
     let controls = control_totals(&pdf_text(control_bytes).await?, year)?;
-    let notes = availability_notes(&counts, &controls, year, n)?;
+    let notes = availability_notes(&roster.counts, &controls, &roster.reported_rows, year, n)?;
     let retrieved = Utc::now().to_rfc3339();
-    Ok(notes.into_iter().map(|(date, availability)| Daily {
-        allow_daily_difference: None,
-            zero_evidence: Vec::new(),
-        unavailable_precincts: Vec::new(), complete: false,
-        county: r.id.clone(), date, counts: counts.remove(&date).unwrap(),
-        source: roster_url.clone(), sha256: roster_sha.clone(), retrieved_at: retrieved.clone(),
-        note: format!("Native in-person residence-precinct roster. {availability} Independent personal-appearance report: {control_url} (SHA256 {control_sha}). No mail ballots."),
-        cumulative: false,
+    Ok(notes.into_iter().map(|(date, availability)| {
+        let counts = roster.counts.remove(&date).unwrap();
+        let unavailable_precincts: Vec<_> = roster.unavailable_precincts
+            .remove(&date).unwrap_or_default().into_iter().collect();
+        let reported = roster.reported_rows[&date];
+        let source_note = format!("Native source rows {reported}; county control minus native source rows {}.",
+            controls.get(&date).map(|control| (i128::from(*control) - i128::from(reported)).to_string())
+                .unwrap_or_else(|| "unavailable".into()));
+        let quarantine = if unavailable_precincts.is_empty() { String::new() } else {
+            format!(" Invalid-row quarantine: {} rows with an unusable VUID or name implicate {} complete date/precinct cells on {date}; {} source rows withheld with those cells. Cells remain unavailable, never zero.",
+                roster.invalid_rows[&date], unavailable_precincts.len(), reported - counts.values().sum::<u64>())
+        };
+        Daily {
+            allow_daily_difference: None, zero_evidence: Vec::new(),
+            unavailable_precincts, complete: false,
+            county: r.id.clone(), date, counts,
+            source: roster_url.clone(), sha256: roster_sha.clone(), retrieved_at: retrieved.clone(),
+            note: format!("Native in-person residence-precinct roster. {source_note}{quarantine} {availability} Independent personal-appearance report: {control_url} (SHA256 {control_sha}). No mail ballots."),
+            cumulative: false,
+        }
     }).collect())
 }
 
@@ -388,8 +445,8 @@ mod tests {
     fn native_dates_ids_and_unassigned_are_preserved() {
         let parsed = rows_to_counts(&rows(), 2026).unwrap();
         let d = start(2026);
-        assert_eq!(parsed[&d]["1A"], 1);
-        assert_eq!(parsed[&d]["UNASSIGNED"], 1);
+        assert_eq!(parsed.counts[&d]["1A"], 1);
+        assert_eq!(parsed.counts[&d]["UNASSIGNED"], 1);
         let mut duplicate = rows();
         duplicate.push(duplicate[1].clone());
         assert!(rows_to_counts(&duplicate, 2026).is_err());
@@ -398,10 +455,46 @@ mod tests {
         assert!(rows_to_counts(&wrong, 2026).is_err());
     }
     #[test]
+    fn blank_identity_withholds_only_its_entire_dated_precinct_cell() {
+        let mut source = rows();
+        source[2] = vec!["", "Synthetic invalid", "2026-10-30", "002"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        source.push(
+            vec!["34567890", "Synthetic same cell", "2026-10-30", "002"]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+        );
+        source.push(
+            vec!["45678901", "Synthetic unaffected", "2026-10-30", "003"]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+        );
+        let parsed = rows_to_counts(&source, 2026)
+            .expect("one blank identity must not reject unaffected dates and cells");
+        assert_eq!(parsed.counts[&start(2026)]["1A"], 1);
+        let final_day = start(2026) + Duration::days(11);
+        assert_eq!(parsed.counts[&final_day]["3"], 1);
+        assert!(
+            !parsed.counts[&final_day].contains_key("2"),
+            "the entire affected precinct cell must remain unavailable"
+        );
+        assert_eq!(
+            parsed.unavailable_precincts[&final_day],
+            BTreeSet::from(["2".into()])
+        );
+        assert_eq!(parsed.reported_rows[&final_day], 3);
+        assert_eq!(parsed.invalid_rows[&final_day], 1);
+    }
+
+    #[test]
     fn reported_subset_survives_with_precise_daily_and_cumulative_gap() {
-        let roster = rows_to_counts(&rows(), 2026).unwrap();
+        let roster = rows_to_counts(&rows(), 2026).unwrap().counts;
         let controls = control_totals("November 3, 2026 General Election\nEarly Voting by Personal Appearance\nGrand Totals\nDATE\nMon 10/19/26 3\nTOTAL 3\n", 2026).unwrap();
-        let notes = availability_notes(&roster, &controls, 2026, 2).unwrap();
+        let notes = availability_notes(&roster, &controls, &BTreeMap::new(), 2026, 2).unwrap();
         assert_eq!(notes.len(), 1); // Missing day two is not an invented zero.
         assert!(
             notes[&start(2026)]
@@ -413,14 +506,33 @@ mod tests {
     }
     #[test]
     fn unexplained_excess_and_future_zero_are_rejected() {
-        let mut roster = rows_to_counts(&rows(), 2026).unwrap();
+        let mut roster = rows_to_counts(&rows(), 2026).unwrap().counts;
         roster
             .get_mut(&start(2026))
             .unwrap()
             .insert("100".into(), 3);
-        assert!(availability_notes(&roster, &BTreeMap::from([(start(2026), 2)]), 2026, 1).is_err());
-        assert!(availability_notes(&roster, &BTreeMap::from([(start(2026), 0)]), 2026, 1).is_err());
-        let notes = availability_notes(&roster, &BTreeMap::new(), 2026, 1).unwrap();
+        assert!(
+            availability_notes(
+                &roster,
+                &BTreeMap::from([(start(2026), 2)]),
+                &BTreeMap::new(),
+                2026,
+                1
+            )
+            .is_err()
+        );
+        assert!(
+            availability_notes(
+                &roster,
+                &BTreeMap::from([(start(2026), 0)]),
+                &BTreeMap::new(),
+                2026,
+                1
+            )
+            .is_err()
+        );
+        let notes =
+            availability_notes(&roster, &BTreeMap::new(), &BTreeMap::new(), 2026, 1).unwrap();
         assert!(notes[&start(2026)].contains("independent daily county control unavailable"));
     }
     #[test]
@@ -436,6 +548,7 @@ mod tests {
         let notes = availability_notes(
             &roster,
             &BTreeMap::from([(first, 0), (second, 10)]),
+            &BTreeMap::new(),
             2026,
             2,
         )
@@ -444,15 +557,98 @@ mod tests {
         assert!(notes[&second].contains("Available roster cumulative 7"));
         assert!(notes[&second].contains("county-wide completion is not established"));
         // A bad newest date likewise cannot revoke an earlier validated date.
-        let notes =
-            availability_notes(&roster, &BTreeMap::from([(first, 5), (second, 2)]), 2026, 2)
-                .unwrap();
+        let notes = availability_notes(
+            &roster,
+            &BTreeMap::from([(first, 5), (second, 2)]),
+            &BTreeMap::new(),
+            2026,
+            2,
+        )
+        .unwrap();
         assert_eq!(notes.keys().copied().collect::<Vec<_>>(), vec![first]);
         // A date's own inconsistent cumulative proof is still withheld.
-        let notes =
-            availability_notes(&roster, &BTreeMap::from([(first, 4), (second, 6)]), 2026, 2)
-                .unwrap();
+        let notes = availability_notes(
+            &roster,
+            &BTreeMap::from([(first, 4), (second, 6)]),
+            &BTreeMap::new(),
+            2026,
+            2,
+        )
+        .unwrap();
         assert_eq!(notes.keys().copied().collect::<Vec<_>>(), vec![first]);
+    }
+
+    #[test]
+    fn cell_quarantine_preserves_cross_date_identity_and_election_guards() {
+        let mut source = rows();
+        // Two different dates may not reuse a nonblank identity, even if one
+        // row will be quarantined for another defect.
+        let mut reused = source[1].clone();
+        reused[1] = String::new();
+        reused[2] = "2026-10-30".into();
+        source.push(reused);
+        assert!(rows_to_counts(&source, 2026).is_err());
+        for bad_date in ["", "not a date", "2024-10-21", "2026-10-31"] {
+            let mut source = rows();
+            source[2][0] = String::new();
+            source[2][2] = bad_date.into();
+            assert!(rows_to_counts(&source, 2026).is_err());
+        }
+        let mut ambiguous = rows();
+        ambiguous[0].push("VUID".into());
+        assert!(rows_to_counts(&ambiguous, 2026).is_err());
+    }
+
+    #[test]
+    fn invalid_named_or_malformed_identity_cells_are_removed_in_both_row_orders() {
+        for invalid in ["", "short", "1234567", "12345678901"] {
+            for bad_first in [true, false] {
+                let mut source = rows();
+                source[2][0] = invalid.into();
+                source[2][3] = "001A".into();
+                if bad_first {
+                    source.swap(1, 2);
+                }
+                // A different valid cell must survive, while both rows of 1A
+                // are withheld regardless of where the invalid row occurs.
+                source.push(
+                    vec!["34567890", "Synthetic valid", "2026-10-19", "002"]
+                        .into_iter()
+                        .map(str::to_string)
+                        .collect(),
+                );
+                let parsed = rows_to_counts(&source, 2026).unwrap();
+                assert_eq!(parsed.counts[&start(2026)], Counts::from([("2".into(), 1)]));
+                assert_eq!(
+                    parsed.unavailable_precincts[&start(2026)],
+                    BTreeSet::from(["1A".into()])
+                );
+            }
+        }
+        let mut source = rows();
+        source[1][1] = String::new();
+        let parsed = rows_to_counts(&source, 2026).unwrap();
+        assert!(!parsed.counts[&start(2026)].contains_key("1A"));
+        assert_eq!(parsed.invalid_rows[&start(2026)], 1);
+        // If every cell is invalid, no dated zero observation can escape.
+        source[2][1] = String::new();
+        assert!(rows_to_counts(&source, 2026).is_err());
+    }
+
+    #[test]
+    fn quarantine_cannot_conceal_an_original_roster_control_excess() {
+        let first = start(2026);
+        let counts = BTreeMap::from([(first, Counts::from([("101".into(), 1)]))]);
+        assert!(
+            availability_notes(
+                &counts,
+                &BTreeMap::from([(first, 3)]),
+                &BTreeMap::from([(first, 5)]),
+                2026,
+                1
+            )
+            .is_err()
+        );
     }
 
     #[test]

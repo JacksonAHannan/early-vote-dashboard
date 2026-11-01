@@ -57,6 +57,25 @@ fn explicit_zero_recovers_only_the_proven_precinct_and_its_common_group() {
     assert_eq!(p.coverage.available_precincts, 3);
     assert_eq!((p.county_2024, p.county_2026), (14, 8));
 }
+
+#[test]
+fn historical_in_person_zero_is_bounded_to_its_election_and_early_window() {
+    let mut historical = proof();
+    historical["year"] = json!(2024);
+    historical["through"] = json!("2024-11-01");
+    let f = fixture(vec![historical.clone()]);
+    let report = quality::Report::load(&f.0).unwrap();
+    let mut old = daily(1, json!({"1":5,"2":3}));
+    old.date = texas_turnout::start(2024);
+    let current = daily(1, json!({"1":8}));
+    let sources = report.sources("travis", &[old, current]);
+    assert_eq!(sources[0].counts.get("3"), Some(&0));
+    assert!(!sources[0].complete);
+    assert!(!sources[1].counts.contains_key("3"));
+    historical["through"] = json!("2024-11-02");
+    let invalid = fixture(vec![historical]);
+    assert!(quality::Report::load(&invalid.0).is_err());
+}
 #[test]
 fn dated_evidence_does_not_fill_future_days_or_fabricate_missing_rosters() {
     let f = fixture(vec![proof()]);

@@ -33,7 +33,7 @@ class ControlRefresh(unittest.TestCase):
             stack.enter_context(patch.object(M, 'OUT', output))
             stack.enter_context(patch.object(M, 'EVIDENCE', root / 'evidence'))
             stack.enter_context(patch.object(M, 'historical', return_value=historical))
-            for name in ['harris','tarrant','fortbend','bexar','vendor']:
+            for name in ['harris','tarrant','fortbend','bexar','vendor','travis']:
                 stack.enter_context(patch.object(M, name, return_value=[]))
             def dallas(through, offline, year=2026):
                 if year == 2024:
@@ -65,6 +65,14 @@ class ControlRefresh(unittest.TestCase):
     def test_historical_sos_supplies_an_uncovered_date(self):
         fresh = control(SOS,50876,'b')
         self.assertEqual(self.run_refresh([], [fresh]), [fresh])
+
+    def test_superseded_travis_graph_is_not_reused_when_native_pdf_is_unavailable(self):
+        graph = dict(control('https://updates.electionlink.net/widgets/travistx/2026-11-03/EarlyVotingGraphs.html',47703),
+                     county='travis',year=2026,date='2026-10-30')
+        native = dict(graph,source='https://votetravis.gov/wp-content/uploads/G26-Daily-Totals-10302026.pdf',daily=47716)
+        result = M.seed_controls([graph],[],date(2026,10,30))
+        self.assertEqual(result,{})
+        self.assertEqual(list(M.seed_controls([native],[],date(2026,10,30)).values()),[native])
 
     def test_missing_original_archive_downloads_official_aggregate_and_validates_all_sites(self):
         first = date(2024,10,21)

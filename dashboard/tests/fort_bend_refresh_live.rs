@@ -18,10 +18,22 @@ async fn current_native_publication_is_discovered_and_checked_by_date() {
         .await
         .expect("current advertised native publication should remain usable");
     assert!(!reports.is_empty());
+    assert!(
+        reports.iter().any(|report| report.date == through),
+        "the currently advertised native publication must retain the requested final day"
+    );
     for report in &reports {
         assert!(report.date <= through);
         assert!(!report.cumulative && !report.complete);
         assert!(report.counts.values().sum::<u64>() > 0);
+        assert!(report.zero_evidence.is_empty());
+        for precinct in &report.unavailable_precincts {
+            assert!(
+                !report.counts.contains_key(precinct),
+                "an invalid row must withhold the complete dated native precinct cell"
+            );
+        }
+        assert!(report.note.contains("Native source rows"));
         assert!(
             report
                 .source
@@ -33,12 +45,14 @@ async fn current_native_publication_is_discovered_and_checked_by_date() {
                 .contains("county-wide completion is not established")
         );
         eprintln!(
-            "{}: {} reported native precincts, {} votes; source {} SHA256 {}",
+            "{}: {} reported native precincts, {} votes; unavailable {:?}; source {} SHA256 {}; {}",
             report.date,
             report.counts.len(),
             report.counts.values().sum::<u64>(),
+            report.unavailable_precincts,
             report.source,
-            report.sha256
+            report.sha256,
+            report.note
         );
     }
     if let Ok(path) = std::env::var("TURNOUT_FORT_BEND_REFRESH_OUTPUT") {

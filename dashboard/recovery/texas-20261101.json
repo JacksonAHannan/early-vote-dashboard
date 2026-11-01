@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "method": "Reviewed explicit native cumulative-zero subset proofs in both cycles; actual closed source windows and generation dates retained, no positive out-of-period votes.",
+  "observations": [],
+  "zero_proofs": [
+    {
+      "county": "travis",
+      "year": 2026,
+      "through": "2026-10-30",
+      "precincts": [
+        "159"
+      ],
+      "scope": "in_person_cumulative",
+      "source": "https://updates.electionlink.net/widgets/travistx/2026-11-03/TurnoutByPrecinctTable.html",
+      "sha256": "174a4d25be30b209b6abcc730c21f0c760e931700db920a28f28b8f30b43e5d4",
+      "retrieved_at": "2026-11-01T21:27:24.617080+00:00",
+      "note": "Reviewed literal native residence precinct 159 Early Vote=0 in county-linked November 3, 2026 precinct table; registered=1, election-day=0, provisional applications=0. Actual independently reconciled CLOSED source window is October 19\u201331, 2026, generated 2026-11-01T15:18:30.800160-06:00. The full table ordinary Early Vote sum 427452 equals the separate ordinary EV graph over that actual window. Because every in-person count is nonnegative, a literal cumulative zero on October 19\u201331 proves zero on its October 19\u201330 subset. The claimed zero coverage ends October 30; no positive October 31 vote or other category is included. No earlier positive or quarantined precinct159 source cell was found. Corroborating graph https://updates.electionlink.net/widgets/travistx/2026-11-03/EarlyVotingGraphs.html SHA256 81c8d9d4cf5da1124c2dede1a4d8f07e2165b561e16f3076212c4e2fc0da51f5. Raw actual-window proof and direct-Oct30 parser rejection remain in analysis/parity-repair/native/."
+    },
+    {
+      "county": "travis",
+      "year": 2024,
+      "through": "2024-11-01",
+      "precincts": [
+        "175"
+      ],
+      "scope": "in_person_cumulative",
+      "source": "https://updates.electionlink.net/widgets/travistx/2024-11-05/TurnoutByPrecinctTable.html",
+      "sha256": "64f62280829ee111e9074283cc529cb3d28216ea2b9261deed3af3eb0bd6e5d1",
+      "retrieved_at": "2026-11-01T21:35:49.753901+00:00",
+      "note": "Reviewed literal residence precinct175 Early Vote=0 for November5,2024 General Election in county-linked precinct table. The separate Election Day and Affidavit columns are not used as in-person counts; no final-canvass or all-methods ballot claim is made. Actual reconciled source graph spans reported dates October21\u2013November1 plus November5; full table Early Vote sum461080 equals that entire closed graph. Report generated 2024-11-21T09:13:18.561210-06:00. Nonnegative cumulative zero over that broader reported window entails zero on its October21\u2013November1 subset, the sole claimed coverage. No positive November5 count is included, and no missing November2\u20134 daily zero is inferred. No earlier positive or quarantined precinct175 source cell exists among all12 frozen2024reports. Corroborating graph https://updates.electionlink.net/widgets/travistx/2024-11-05/EarlyVotingGraphs.html SHA256 177b1ee658313c7bd3a86abd9aa9fbfd6cd3c381b575488ee8d9dc233cb2e60a. Full actual-window proof: analysis/parity-repair/native/travis-2024-zero-validation.json."
+    }
+  ]
+}

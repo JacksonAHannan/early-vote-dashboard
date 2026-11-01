@@ -22,6 +22,59 @@ fn is_complete(source: &Daily, universe: &BTreeSet<String>) -> bool {
             .all(|(id, count)| *count == 0 || universe.contains(id))
 }
 
+/// A quarantined, cumulative-only supplement does not supersede an independent
+/// uninterrupted daily series. The two populations can disagree; select the
+/// whole daily path, without merging cells or choosing larger vote counts.
+fn preferred_daily_prefix(
+    sources: &[Daily],
+    year: i32,
+    day: u32,
+    universe: &BTreeSet<String>,
+) -> Option<(Counts, bool)> {
+    let through = start(year) + chrono::Duration::days(i64::from(day) - 1);
+    let anchor = sources
+        .iter()
+        .filter(|s| s.date >= start(year) && s.date <= through && s.cumulative)
+        .max_by_key(|s| (s.date, &s.retrieved_at))?;
+    if is_complete(anchor, universe) || anchor.allow_daily_difference != Some(false) {
+        return None;
+    }
+    let mut total = Counts::new();
+    let mut complete = true;
+    for offset in 1..=day {
+        let daily = exact(sources, year, offset, false)?;
+        let now = counts_with_ids(sources, year, offset, false, universe)?;
+        let now_complete = is_complete(daily, universe);
+        if offset == 1 {
+            total = now;
+        } else {
+            total = total
+                .keys()
+                .chain(now.keys())
+                .cloned()
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .filter_map(|id| {
+                    let before = total
+                        .get(&id)
+                        .copied()
+                        .or((complete && universe.contains(&id)).then_some(0))?;
+                    let current = now
+                        .get(&id)
+                        .copied()
+                        .or((now_complete && universe.contains(&id)).then_some(0))?;
+                    Some((id, before + current))
+                })
+                .collect();
+        }
+        complete &= now_complete;
+    }
+    total
+        .keys()
+        .any(|id| universe.contains(id))
+        .then_some((total, complete))
+}
+
 pub fn full(sources: &[Daily], year: i32, day: u32, cumulative: bool) -> bool {
     let universe = sources
         .iter()
@@ -38,6 +91,10 @@ pub(crate) fn full_with_ids(
     cumulative: bool,
     universe: &BTreeSet<String>,
 ) -> bool {
+    if cumulative && let Some((_, complete)) = preferred_daily_prefix(sources, year, day, universe)
+    {
+        return complete;
+    }
     if let Some(d) = exact(sources, year, day, cumulative) {
         return is_complete(d, universe);
     }
@@ -83,6 +140,9 @@ pub(crate) fn counts_with_ids(
 ) -> Option<Counts> {
     if !(1..=12).contains(&day) {
         return None;
+    }
+    if cumulative && let Some((counts, _)) = preferred_daily_prefix(sources, year, day, universe) {
+        return Some(counts);
     }
     if let Some(d) = exact(sources, year, day, cumulative) {
         let mut counts = d.counts.clone();
@@ -395,6 +455,99 @@ mod tests {
         let s = vec![source(2026, 2, &[("1", 5)], false)];
         assert!(counts(&s, 2026, 2, true).is_none());
         assert!(counts(&s, 2026, 2, false).is_some());
+    }
+    #[test]
+    fn supplementary_partial_anchor_keeps_independent_daily_prefix() {
+        let mut anchor = source(2026, 2, &[("1", 99), ("3", 40)], false);
+        anchor.cumulative = true;
+        anchor.allow_daily_difference = Some(false);
+        let sources = vec![
+            source(2026, 1, &[("1", 10), ("2", 20)], false),
+            source(2026, 2, &[("1", 5), ("2", 7)], false),
+            anchor,
+            source(2026, 3, &[("1", 2), ("2", 3)], false),
+        ];
+        // Select one independently dated path, never per-cell maxima or a union
+        // of conflicting populations. Keep the anchor as provenance/fallback.
+        assert_eq!(
+            counts(&sources, 2026, 2, true).unwrap(),
+            Counts::from([("1".into(), 15), ("2".into(), 27)])
+        );
+        assert_eq!(
+            counts(&sources, 2026, 3, true).unwrap(),
+            Counts::from([("1".into(), 17), ("2".into(), 30)])
+        );
+        assert!(!full(&sources, 2026, 2, true));
+    }
+
+    #[test]
+    fn supplementary_anchor_still_recovers_missing_daily_prefix() {
+        let mut anchor = source(2026, 2, &[("1", 12)], false);
+        anchor.cumulative = true;
+        anchor.allow_daily_difference = Some(false);
+        let sources = vec![anchor, source(2026, 3, &[("1", 2)], false)];
+        assert_eq!(counts(&sources, 2026, 2, true).unwrap()["1"], 12);
+        assert_eq!(counts(&sources, 2026, 3, true).unwrap()["1"], 14);
+        assert!(counts(&sources, 2026, 2, false).is_none());
+    }
+
+    #[test]
+    fn later_authoritative_anchor_supersedes_supplementary_source() {
+        let mut supplement = source(2026, 1, &[("1", 99)], false);
+        supplement.cumulative = true;
+        supplement.allow_daily_difference = Some(false);
+        let mut final_anchor = source(2026, 2, &[("1", 20)], true);
+        final_anchor.cumulative = true;
+        let sources = vec![
+            source(2026, 1, &[("1", 4)], false),
+            supplement,
+            source(2026, 2, &[("1", 5)], false),
+            final_anchor,
+            source(2026, 3, &[("1", 2)], true),
+        ];
+        assert_eq!(counts(&sources, 2026, 2, true).unwrap()["1"], 20);
+        assert_eq!(counts(&sources, 2026, 3, true).unwrap()["1"], 22);
+        assert!(full(&sources, 2026, 2, true));
+        assert!(full(&sources, 2026, 3, true));
+    }
+
+    #[test]
+    fn supplemental_selection_preserves_native_zero_and_revision_contracts() {
+        let ids = BTreeSet::from(["1".into(), "2".into()]);
+        let mut anchor = source(2026, 2, &[("1", 99)], false);
+        anchor.cumulative = true;
+        anchor.allow_daily_difference = Some(false);
+        let mut sources = vec![
+            source(2026, 1, &[("1", 4)], true),
+            source(2026, 2, &[("1", 5)], true),
+            anchor.clone(),
+        ];
+        assert!(full_with_ids(&sources, 2026, 2, true, &ids));
+        assert_eq!(
+            counts_with_ids(&sources, 2026, 2, true, &ids).unwrap(),
+            Counts::from([("1".into(), 9), ("2".into(), 0)])
+        );
+        sources[0].counts.insert("foreign".into(), 1);
+        assert!(!full_with_ids(&sources, 2026, 2, true, &ids));
+        assert!(
+            !counts_with_ids(&sources, 2026, 2, true, &ids)
+                .unwrap()
+                .contains_key("2")
+        );
+        sources[0] = source(2026, 1, &[("foreign", 1)], false);
+        assert_eq!(
+            counts_with_ids(&sources, 2026, 2, true, &ids).unwrap()["1"],
+            99
+        );
+        let mut revised = anchor;
+        revised.allow_daily_difference = None;
+        revised.retrieved_at = "later".into();
+        revised.counts.insert("1".into(), 50);
+        sources.push(revised);
+        assert_eq!(
+            counts_with_ids(&sources, 2026, 2, true, &ids).unwrap()["1"],
+            50
+        );
     }
     #[test]
     fn cumulative_anchor_and_daily_prefix_recover_available_measurements() {

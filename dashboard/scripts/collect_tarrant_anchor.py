@@ -79,7 +79,14 @@ def parse_native(raw,through,headers,generated,total):
             if not voter or not county_id:invalid[label]+=1;continue
             if not voter.isdigit() or not county_id.isdigit() or voter in identities or county_id in county_ids:raise ValueError('county identity is invalid or repeated')
             identities[voter]=label;county_ids.add(county_id)
-    if sum(rawcounts.values())!=total:raise ValueError('county roster does not reconcile exact-cutoff control')
+    raw_total=sum(rawcounts.values())
+    if not raw_total or total<=0:raise ValueError('empty county roster or independent control')
+    if raw_total>total:raise ValueError('county roster exceeds exact-cutoff control')
+    # A dated control can expose missing county records without invalidating the
+    # positive records actually published. Such a roster is only a reported
+    # subset: never allocate its deficit, infer absent zeros, or mark it complete.
+    metadata.update(raw_roster_rows=raw_total,control_in_person_total=total,
+                    control_minus_roster=total-raw_total)
     return identities,invalid,rawcounts,metadata
 
 
@@ -120,7 +127,11 @@ def aggregate(identities,invalid,results,universe):
             if voter in identities:associations[identities[voter]][target]+=1
     aliases={label:next(iter(targets)) for label,targets in associations.items()
              if len(targets)==1 and next(iter(targets)) in universe}
-    counts=collections.Counter();unknown=collections.Counter();bad=set()
+    counts=collections.Counter();unknown=collections.Counter()
+    # The county source can omit an identified SOS voter even when its aggregate
+    # total equals the location control. Preserve that direct native evidence:
+    # other county rows must not make the affected native cell appear whole.
+    bad={target for voter,target in state_ids.items() if voter not in identities and target in universe}
     direct=collections.defaultdict(collections.Counter);fallback=collections.Counter()
     for voter,label in identities.items():
         target=state_ids.get(voter)
@@ -161,15 +172,20 @@ def collect(through):
     if sum(counts.values())+withheld+sum(invalid.values())!=sum(rawcounts.values()):raise ValueError('raw county row conservation failed')
     source_hash=hashlib.sha256(raw).hexdigest();control_hash=hashlib.sha256(raw_control).hexdigest()
     state_proof=[{k:v for k,v in r.items() if k!='identities'} for r in results]
-    manifest=dict(method='tarrant-exact-cutoff-individual-native-identity-then-unique-all-target-alias-v2',native_sha256=source_hash,control_sha256=control_hash,cutoff=str(through),state=state_proof,metadata=metadata)
+    state_ids={voter:target for result in results for voter,target in result['identities'].items()}
+    missing_county=collections.Counter(target for voter,target in state_ids.items() if voter not in identities)
+    manifest=dict(method='tarrant-exact-cutoff-partial-native-identity-with-known-omission-quarantine-v3',native_sha256=source_hash,control_sha256=control_hash,cutoff=str(through),state=state_proof,metadata=metadata)
     digest=hashlib.sha256(json.dumps(manifest,sort_keys=True,separators=(',',':')).encode()).hexdigest()
     note=('Exact-cutoff cumulative in-person county roster only. Undated rows are never backallocated into daily observations; daily differencing is disabled. '
           'Individual county rows use a unique exact-voter official SOS native residence target through the actual cutoff day. An unmatched row uses a six-digit-label alias only when every observed target agrees on one native precinct, including foreign targets in ambiguity checks. '
-          'Unresolved rows and blank identity cells quarantine every potentially affected native precinct. Native rows reconcile the independently dated completed in-person total before local quarantine. '
+          'Unresolved rows, blank identity cells and known SOS identities missing from the county roster quarantine every potentially affected native precinct. '
+          f'Partial reported subset: county roster {sum(rawcounts.values())}; independent in-person control {total}; control minus roster {total-sum(rawcounts.values())}. '
+          'County and SOS identity populations differ; their reported totals are not interchangeable and their category differences remain unconfirmed. Missing votes are never allocated, and absent precincts are not zero. '
           f'Raw county source SHA256 {source_hash}; independent control {CONTROL_URL} SHA256 {control_hash}; publication metadata {json.dumps(metadata,sort_keys=True)}. '
           'Derived SHA256 hashes canonical input-hash/method manifest. SOS alias evidence '+json.dumps(state_proof,sort_keys=True)+'. No voter identities or raw rosters retained.')
     daily=dict(county='tarrant',date=str(through),counts=counts,source=ZIP_URL,sha256=digest,retrieved_at=datetime.now(timezone.utc).isoformat(),cumulative=True,complete=False,allow_daily_difference=False,unavailable_precincts=unavailable,note=note)
-    evidence=dict(schema_version=1,manifest=manifest,raw_rows=sum(rawcounts.values()),valid_identified_rows=len(identities),blank_identity_rows=sum(invalid.values()),invalid_labels=dict(invalid),withheld_identified_rows=withheld,native_precincts=sum(p in universe for p in counts),all_cutoff_dates_included=[str(d) for d in dates],aliases=proof)
+    evidence=dict(schema_version=1,manifest=manifest,raw_rows=sum(rawcounts.values()),valid_identified_rows=len(identities),blank_identity_rows=sum(invalid.values()),invalid_labels=dict(invalid),withheld_identified_rows=withheld,native_precincts=sum(p in universe for p in counts),all_cutoff_dates_included=[str(d) for d in dates],aliases=proof,
+                  sos_ids_absent_from_identified_county=sum(missing_county.values()),sos_missing_county_by_native_target=dict(sorted(missing_county.items())),county_ids_absent_from_sos=len(identities.keys()-state_ids.keys()))
     return daily,evidence
 
 

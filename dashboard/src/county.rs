@@ -477,11 +477,17 @@ async fn native_county(county: &str, n: u32) -> Result<Vec<Daily>> {
         "invalid native county calendar cutoff"
     );
     let through = start(2026) + chrono::Duration::days(i64::from(n - 1));
-    let child = tokio::process::Command::new("python3")
+    let mut command =
+        tokio::process::Command::new(if county == "dimmit" { "uv" } else { "python3" });
+    if county == "dimmit" {
+        command.args(["run", "--quiet", "--with", "curl-cffi==0.16.3", "python"]);
+    }
+    let child = command
         .arg(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(match county {
                 "collin" => "scripts/collect_collin.py",
                 "panola" => "scripts/collect_panola.py",
+                "dimmit" => "scripts/collect_final_county_recovery.py",
                 "cameron" | "denton" => "scripts/collect_large_county_refresh.py",
                 _ => "scripts/collect_county_native.py",
             }),
@@ -689,6 +695,34 @@ async fn panola(client: &reqwest::Client, reference: &Reference, n: u32) -> Resu
     Ok(values)
 }
 
+async fn dimmit(client: &reqwest::Client, reference: &Reference, n: u32) -> Result<Vec<Daily>> {
+    ensure!((1..=12).contains(&n), "invalid Dimmit cutoff");
+    // The Python path validates one atomic mixed series, sharing identities and
+    // source hashes across native fallback and SOS dates. Never combine only its
+    // native output with a separately retrieved SOS edition.
+    match native_county("dimmit", n).await {
+        Ok(values) => return Ok(values),
+        Err(error) => {
+            eprintln!("Dimmit native proof unavailable: {error}; retaining SOS-only dates")
+        }
+    }
+    let mut values = Vec::new();
+    let mut identities = BTreeSet::new();
+    for offset in 0..n {
+        let date = start(2026) + chrono::Duration::days(i64::from(offset));
+        if let Ok(source) =
+            crate::fetch::fetch_state(client, reference, date, &mut identities).await
+        {
+            values.push(source);
+        }
+    }
+    ensure!(
+        !values.is_empty(),
+        "no usable dated Dimmit in-person reports"
+    );
+    Ok(values)
+}
+
 async fn large_county(
     client: &reqwest::Client,
     reference: &Reference,
@@ -780,6 +814,7 @@ pub async fn collect(
         "tarrant" if year == 2026 => tarrant(client, r, n).await,
         "nueces" if year == 2026 => nueces(client, r, n).await,
         "panola" if year == 2026 => panola(client, r, n).await,
+        "dimmit" if year == 2026 => dimmit(client, r, n).await,
         "collin" if year == 2026 => collin(client, r, n).await,
         "cameron" | "denton" if year == 2026 => large_county(client, r, n).await,
         "fortbend" if crate::fort_bend::supports(year) => {
@@ -812,6 +847,7 @@ pub fn has_adapter(id: &str, year: i32) -> bool {
                 "panola",
                 "cameron",
                 "denton",
+                "dimmit",
             ]
             .contains(&id))
 }
@@ -1391,7 +1427,7 @@ mod tests {
         assert_eq!(days[0].unavailable_precincts, vec!["1"]);
         assert!(days.iter().all(|d| !d.complete));
         assert!(days[1].counts.contains_key("1"));
-        for county in ["waller", "washington", "sanpatricio"] {
+        for county in ["waller", "washington", "sanpatricio", "dimmit"] {
             assert!(has_adapter(county, 2026));
             assert!(!has_adapter(county, 2024));
         }

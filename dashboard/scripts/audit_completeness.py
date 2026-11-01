@@ -226,6 +226,57 @@ def vendor(county, year, through, offline):
                     'County-linked ElectionLink ordinary Early Vote daily graph; separate provisional and mail arrays excluded. Active calendar day and future days excluded, even when the live graph has positive counts.')
 
 
+def travis(through, offline):
+    """Use the county's ordinary location-voter row, reconciled to all sites.
+
+    The vendor graph can revise adjacent dates differently from the county's
+    daily PDF and native workbooks. Limited-ballot and mail totals are separate
+    rows in this report and must never certify the ordinary precinct series.
+    """
+    landing='https://votetravis.gov/current-election-information/current-election/'
+    page=fetch(landing,'travispage.html',offline).decode()
+    candidates={}
+    for href in re.findall(r'<a\b[^>]*href=["\']([^"\']+)',page,re.I):
+        source=urljoin(landing,html.unescape(href))
+        parsed=urlparse(source)
+        match=re.fullmatch(r'/wp-content/uploads/G26-Daily-Totals-(\d{8})(?:-\d+)?\.pdf',parsed.path,re.I)
+        if parsed.scheme!='https' or parsed.hostname not in ('votetravis.gov','www.votetravis.gov') or not match:
+            continue
+        cutoff=datetime.strptime(match[1],'%m%d%Y').date()
+        if cutoff.year==2026 and date(2026,10,19)<=cutoff<=date(2026,10,30):
+            candidates.setdefault(cutoff,set()).add(source)
+    if not candidates or len(candidates[max(candidates)])!=1:
+        raise ValueError('Travis dated county aggregate link missing or ambiguous')
+    cutoff=max(candidates);source=next(iter(candidates[cutoff]))
+    raw=fetch(source,'travis-2026.pdf',offline);text=pdf(raw)
+    if not re.search(r'November\s+0?3,\s+2026',text) or 'Early Voting Location Voters' not in text:
+        raise ValueError('wrong Travis aggregate election or ordinary scope')
+    dates=re.search(r'^\s*((?:\d{1,2}-Oct[ \t]*){12})\s*$',text,re.M)
+    if not dates:
+        raise ValueError('Travis twelve-date header missing')
+    days=[datetime.strptime(f'{d}-2026','%d-%b-%Y').date() for d in dates[1].split()]
+    if days!=[date(2026,10,19)+timedelta(days=i) for i in range(12)]:
+        raise ValueError('Travis aggregate reporting dates changed')
+    number=r'(?:\d[\d,]*|N/A)'
+    table=re.findall(r'^\s*(.*?)\s{2,}('+number+r'(?:[ \t]+'+number+r'){12})[ \t]*$',text,re.M)
+    ordinary=[(i,values) for i,(label,values) in enumerate(table) if label=='Early Voting Location Voters']
+    if len(ordinary)!=1:
+        raise ValueError('Travis ordinary aggregate row missing or ambiguous')
+    index,values=ordinary[0]
+    totals=[int(n.replace(',','')) for n in values.split()]
+    if sum(totals[:12])!=totals[12]:
+        raise ValueError('Travis ordinary daily/cumulative arithmetic')
+    excluded={'Limited Ballots','Mail Ballots Received','Cumulative'}
+    sites=[[0 if n=='N/A' else int(n.replace(',','')) for n in values.split()]
+           for label,values in table[index+1:] if label not in excluded]
+    if len(sites)<10 or any(sum(row[:12])!=row[12] for row in sites):
+        raise ValueError('Travis polling-place universe or cumulative arithmetic')
+    if any(sum(row[i] for row in sites)!=totals[i] for i in range(13)):
+        raise ValueError('Travis ordinary aggregate differs from polling-place rows')
+    return sequence('travis',2026,{d:n for d,n in zip(days,totals[:12]) if d<=cutoff},source,raw,through,
+                    f'Official dated county ordinary Early Voting Location Voters through {cutoff}; all polling-place daily and cumulative totals reconciled. Separate Limited Ballots and Mail Ballots Received excluded. Vendor graph revisions do not override this native county report. Unofficial administrative totals remain subject to revision.')
+
+
 def workbook(raw):
     ns={'m':'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
@@ -329,7 +380,12 @@ def seed_controls(previous, historical_rows, through):
     """
     controls={(r['county'],r['year'],r['date']):r for r in previous
               if r.get('scope')=='in_person' and r.get('completed') is True
-              and date.fromisoformat(r['date'])<=through}
+              and date.fromisoformat(r['date'])<=through
+              # The native ordinary PDF supersedes the conflicting current
+              # Travis graph. A failed refresh must not resurrect that graph;
+              # prior exact-date native PDF controls can still be retained.
+              and not (r['county']=='travis' and r['year']==2026
+                       and urlparse(r['source']).hostname=='updates.electionlink.net')}
     for row in historical_rows:
         key=(row['county'],row['year'],row['date'])
         prior=controls.get(key)
@@ -362,7 +418,9 @@ def main():
         'bexar':lambda:bexar(args.through,args.offline),
         'dallas':lambda:dallas(args.through,args.offline),
         'dallas-2024':lambda:dallas(args.through,args.offline,2024),
-        **{f'{c}-{y}':(lambda c=c,y=y:vendor(c,y,args.through,args.offline)) for c in ['travis','montgomery'] for y in [2024,2026]},
+        'travis-2026':lambda:travis(args.through,args.offline),
+        'travis-2024':lambda:vendor('travis',2024,args.through,args.offline),
+        **{f'montgomery-{y}':(lambda y=y:vendor('montgomery',y,args.through,args.offline)) for y in [2024,2026]},
     }
     errors=[]
     with ThreadPoolExecutor(max_workers=6) as executor:

@@ -63,15 +63,30 @@ def resolve(sources, year, ids):
                 if precinct_id(p) not in unavailable and (p in source['counts'] or certified)}
     cumulative = []
     daily = []
+    prefix = None
+    effective_anchor = None
     for day in range(12):
         ev = direct(day, False)
         total = direct(day, True)
+        if day == 0:
+            prefix = ev
+        elif prefix is not None and ev is not None:
+            prefix = {p: prefix[p] + ev[p] for p in prefix.keys() & ev.keys()}
+        else:
+            prefix = None
+        anchor = latest.get(((start(year) + timedelta(days=day)).isoformat(), True))
+        if anchor is not None:
+            effective_anchor = anchor
+        if effective_anchor is not None and effective_anchor.get('allow_daily_difference') is False:
+            complete = (effective_anchor['complete'] and not effective_anchor.get('unavailable_precincts')
+                        and not any(n > 0 and p not in ids for p, n in effective_anchor['counts'].items()))
+            if not complete and prefix:
+                total = dict(prefix)
         if total is None and ev is not None:
             if day == 0:
                 total = dict(ev)
             elif cumulative[-1] is not None:
                 total = {p: ev[p] + cumulative[-1][p] for p in ev.keys() & cumulative[-1].keys()}
-        anchor = latest.get(((start(year) + timedelta(days=day)).isoformat(), True))
         if ev is None and total is not None and (anchor is None or anchor.get('allow_daily_difference') is not False):
             prior = cumulative[-1] if day else dict.fromkeys(ids, 0)
             if prior is not None:
@@ -101,7 +116,13 @@ def check_resolver_contract():
     anchor['allow_daily_difference'] = False
     daily, cumulative = resolve([observation(1, {'1': 5}), anchor], 2026, ids)
     assert daily[1] is None and cumulative[1] == {'1': 20, '2': 0}
-    return 6
+    anchor['complete'] = False
+    daily, cumulative = resolve([observation(1, {'1': 5}), observation(2, {'1': 6}), anchor], 2026, ids)
+    assert cumulative[1] == {'1': 11, '2': 0} and daily[1] == {'1': 6, '2': 0}
+    later = observation(3, {'1': 50}, cumulative=True)
+    daily, cumulative = resolve([observation(1, {'1': 5}), observation(2, {'1': 6}), anchor, later], 2026, ids)
+    assert cumulative[2] == {'1': 50, '2': 0} and daily[2] == {'1': 39, '2': 0}
+    return 8
 
 
 def fit(points):

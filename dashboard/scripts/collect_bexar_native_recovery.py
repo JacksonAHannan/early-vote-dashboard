@@ -7,13 +7,14 @@ explicit recovery audit, not an unreviewed replacement for the production source
 from __future__ import annotations
 import argparse, base64, collections, csv, hashlib, io, json, re, subprocess
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[2]
-DOCS = {19:1953,20:1957,21:1958,22:1961,23:1962,24:1965,25:1969,26:1972}
 API = 'https://elections.bexar.gov/Admin/DocumentCenter/Home/Document_AjaxBinding?renderMode=0&loadSource=7'
 ROW = re.compile(r'^.*?\s+(\d{8,12})\s+.+?\s+([PS])\s+(\d+(?:\.\d+)?)\s*$')
+HEADER = re.compile(r'Name\s+VUID\s+Polling\s*Place\s+Precinct',re.I)
 
 
 def download(url, form=None):
@@ -26,7 +27,7 @@ def download(url, form=None):
 
 
 def parse_pdf_text(text):
-    if not re.search(r'Name\s+VUID\s+Polling Place\s+Precinct',text):
+    if not HEADER.search(text):
         raise ValueError('Bexar roster header changed')
     identities={}; original_rows={}; tainted=set(); repeats=0; blanks=collections.Counter(); nonrows=collections.Counter()
     for line in text.splitlines():
@@ -38,7 +39,7 @@ def parse_pdf_text(text):
             if blank:
                 blanks[f'{blank[1]} {blank[2]}']+=1
                 continue
-            if re.search(r'Name\s+VUID\s+Polling Place\s+Precinct',line):continue
+            if HEADER.search(line):continue
             if re.fullmatch(r'\s*Page\s+\d+\s+of\s+\d+\s*',line):continue
             nonrows[re.sub(r'\d','0',line.strip())]+=1
             continue
@@ -93,12 +94,19 @@ def aggregate(results,native_ids,metadata):
             for result,label in items:
                 result['identities'].pop(voter,None)
                 result['blank_labels'][label]=result['blank_labels'].get(label,0)+1
+    # A state identity repeated on two dates cannot establish which day's
+    # native record supplies residence. Preserve its state observations while
+    # withholding it from both alias proof and repair.
+    state_frequency=collections.Counter(voter for result in results for voter in result['state'])
     proofs=collections.defaultdict(collections.Counter)
     for result in results:
         for voter,label in result['identities'].items():
             target=result['state'].get(voter)
-            if target in native_ids:proofs[label][target]+=1
-    aliases={label:next(iter(counts)) for label,counts in proofs.items() if len(counts)==1}
+            if target is not None and state_frequency[voter]==1:proofs[label][target]+=1
+    # Foreign targets are contradictory official associations too; dropping
+    # them before uniqueness could manufacture a native alias from a subset.
+    aliases={label:next(iter(counts)) for label,counts in proofs.items()
+             if len(counts)==1 and next(iter(counts)) in native_ids}
     observations=[];diagnostics=[];seen=set()
     for result in results:
         ids=result['identities']
@@ -112,7 +120,7 @@ def aggregate(results,native_ids,metadata):
         withheld=sum(counts.pop(label,0) for label in unavailable)
         repaired=collections.Counter(result['state'].values());reassignments=collections.Counter()
         for voter,p in result['state'].items():
-            if p in native_ids:continue
+            if p in native_ids or state_frequency[voter]!=1:continue
             label=ids.get(voter);target=aliases.get(label)
             if target:
                 repaired[p]-=1;repaired[target]+=1;reassignments[(p,label,target)]+=1
@@ -128,7 +136,7 @@ def aggregate(results,native_ids,metadata):
              f'Official document title: {m["DisplayName"]}. '
              f'Alias proof manifest includes SOS source hashes; {sum(unresolved.values())} votes retain unresolved residence labels.')))
         diagnostics.append(dict(date=result['when'],rows=len(ids),repeated_identical_rows=result['repeats'],
-            cross_date_ids=cross_date_ids,state_rows=len(result['state']),shared_ids=len(ids.keys() & result['state'].keys()),
+            cross_date_ids=cross_date_ids,cross_date_state_ids=sum(state_frequency[voter]>1 for voter in result['state']),state_rows=len(result['state']),shared_ids=len(ids.keys() & result['state'].keys()),
             county_only_ids=len(ids.keys()-result['state'].keys()),state_only_ids=len(result['state'].keys()-ids.keys()),
             native_precincts=sum(p in native_ids for p in counts),unusable_identity_rows=sum(result['blank_labels'].values()),unusable_identity_labels=result['blank_labels'],withheld_identified_rows=withheld,unavailable_precincts=unavailable,reassignments=result['reassignments'],repaired_unmapped={p:n for p,n in repaired.items() if p not in native_ids},unresolved=dict(sorted(unresolved.items())),
             source=result['source'],sha256=result['sha256'],state_source=result['state_source'],
@@ -139,19 +147,32 @@ def aggregate(results,native_ids,metadata):
         days=diagnostics,observations=observations,repaired_state_observations=[dict(county='bexar',date=r['when'],counts=r['repaired_counts'],source=r['state_source'],sha256=r['state_sha256'],cumulative=False,complete=False,retrieved_at=datetime.now(timezone.utc).isoformat(),note='Original SOS in-person observations, with unknown residence labels repaired ONLY through exact same-date voter-ID joins to official county PDF rows and independently unique native alias proofs. Source counts and all already-native SOS labels are preserved. See separate aggregate alias/source manifest.') for r in results if r['state']])
 
 
-def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--through',type=date.fromisoformat,default=date(2026,10,26));parser.add_argument('--output',type=Path,required=True);args=parser.parse_args()
-    response=json.loads(download(API,dict(folderId=245,getDocuments=1,imageRepo=False,renderMode=0,loadSource=7,requestingModuleID=75,searchString='',pageNumber=1,rowsPerPage=100,sortColumn='DisplayName',sortOrder=0)))
+def discover_documents(response,through):
+    first,last=date(2026,10,19),date(2026,10,30)
+    if not first<=through<=last:
+        raise ValueError('Bexar cutoff outside reviewed election calendar')
     metadata={}
-    for d in response['Documents']:
-        m=re.search(r'Early Vote Ballots\s*-\s*(2026-10-\d\d)\s*-\s*November 3, 2026 General Election',d['DisplayName'])
-        if m and date.fromisoformat(m[1])<=args.through:
-            if m[1] in metadata:raise ValueError('duplicate date titles')
-            metadata[m[1]]=d
-    targets=[(date(2026,10,day),doc) for day,doc in DOCS.items() if date(2026,10,day)<=args.through]
-    if {str(day) for day,_ in targets}!=metadata.keys():raise ValueError('official dated document inventory changed')
-    for day,doc in targets:
-        if metadata[str(day)]['ID']!=doc:raise ValueError('official document identity changed')
+    for document in response['Documents']:
+        match=re.fullmatch(r'Early Vote Ballots\s*-\s*(2026-10-\d\d)\s*-\s*November 3, 2026 General Election',document['DisplayName'])
+        if not match:continue
+        when=date.fromisoformat(match[1])
+        if not first<=when<=through:continue
+        if match[1] in metadata or type(document['ID']) is not int or document['ID']<=0:
+            raise ValueError('ambiguous Bexar dated document identity')
+        metadata[match[1]]=document
+    required={str(first+timedelta(days=i)) for i in range((through-first).days+1)}
+    if metadata.keys()!=required:
+        raise ValueError('official Bexar completed-date document inventory incomplete')
+    return metadata
+
+
+def main():
+    yesterday=datetime.now(ZoneInfo('America/Chicago')).date()-timedelta(days=1)
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--through',type=date.fromisoformat,default=min(yesterday,date(2026,10,30)));parser.add_argument('--output',type=Path,required=True);args=parser.parse_args()
+    if args.through>yesterday:parser.error('active or future county dates cannot supply native proof')
+    response=json.loads(download(API,dict(folderId=245,getDocuments=1,imageRepo=False,renderMode=0,loadSource=7,requestingModuleID=75,searchString='',pageNumber=1,rowsPerPage=100,sortColumn='DisplayName',sortOrder=0)))
+    metadata=discover_documents(response,args.through)
+    targets=[(date.fromisoformat(when),document['ID']) for when,document in sorted(metadata.items())]
     refs=json.loads((ROOT/'dashboard/data/reference.json').read_text());ref=next(c for c in refs if c['id']=='bexar');native={p for g in ref['groups'] for p in g['new']}
     with ThreadPoolExecutor(max_workers=2) as pool:results=list(pool.map(lambda t:collect_day(*t),targets))
     bundle=aggregate(results,native,metadata);args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(bundle,indent=2)+'\n')

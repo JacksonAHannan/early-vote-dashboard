@@ -382,6 +382,28 @@ Panola's county VRH PDFs fill only dates lacking a usable SOS in-person report. 
 
 Tarrant's cumulative anchor now includes the actual cutoff-day identity source and resolves individually proved rows before applying a unique all-target alias to unmatched rows. New evidence can invalidate earlier aliases; the reviewed October 26 correction is pinned in the existing recovery edition, while future unreviewed hashes are preserved. No daily counts are derived from this anchor. Grayson's certified native presidential returns now cover all 41 historical precincts and independently reconcile every candidate/method total; turnout and geography are unchanged.
 
+Partial cumulative-only supplements do not replace an uninterrupted, independently
+dated daily series. Matching selects the entire daily path when it supports native
+precincts; it never pools conflicting cells or chooses larger vote counts. A later
+ordinary or complete cumulative anchor retains its established precedence. Tarrant
+rosters below their exact-cutoff control remain explicitly partial, and known SOS
+identities absent from the county roster quarantine the affected anchor cells.
+Fort Bend isolates an invalid identity to its complete dated precinct cell, while
+duplicate identities and unlocatable dates still reject the source. Current Travis
+controls use the county ordinary-voting PDF, reconciled across polling places,
+instead of the conflicting vendor graph. These repairs preserve unresolved scope
+and source deficits; they do not certify final canvassed totals.
+
+Dimmit's 2026 adapter uses strictly dated county VRH batches only when SOS has no
+in-person source. One atomic series binds all native/SOS identity checks and
+source hashes; its eleven existing SOS dates remain unchanged. A failed native
+proof falls back to SOS-only collection. Reviewed literal cumulative-zero cells
+can support either year's bounded early-voting period, with the real report
+window retained in provenance and earlier positive/quarantined cells vetoing the
+zero. The November 1 recovery edition proves only Travis precincts 159 (2026)
+and 175 (2024). See the [final reconciliation](../sources/final-early-vote-refresh/gaps-20261101.md)
+for source deficits, rejected alternatives and verification.
+
 
 ### Recurring source reliability
 

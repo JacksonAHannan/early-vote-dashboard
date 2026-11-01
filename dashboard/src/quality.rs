@@ -71,7 +71,11 @@ pub struct RecoveredObservation {
 impl Recovery {
     fn load(root: &Path) -> Result<Option<Self>> {
         let mut editions = Vec::new();
-        for file in ["texas-20261025.json", "texas-20261027.json"] {
+        for file in [
+            "texas-20261025.json",
+            "texas-20261027.json",
+            "texas-20261101.json",
+        ] {
             let path = root.join("recovery").join(file);
             if path.exists() {
                 let edition: Self = serde_json::from_slice(&std::fs::read(path)?)?;
@@ -128,9 +132,8 @@ impl Recovery {
                             proof.year == 2024
                                 && evidence.through == NaiveDate::from_ymd_opt(2024, 11, 5).unwrap(),
                         "in_person_cumulative" =>
-                            proof.year == 2026
-                                && evidence.through
-                                    <= crate::start(2026) + chrono::Duration::days(11),
+                            evidence.through
+                                <= crate::start(proof.year) + chrono::Duration::days(11),
                         _ => false,
                     },
                     "Unsupported zero-evidence scope or cutoff"

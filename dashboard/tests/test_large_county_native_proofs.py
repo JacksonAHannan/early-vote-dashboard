@@ -1,5 +1,6 @@
 """Synthetic contract checks: source identity and explicit zero proofs only."""
 import importlib.util
+from datetime import date
 from pathlib import Path
 import unittest
 
@@ -10,6 +11,15 @@ def load(name):
 bexar=load('collect_bexar_native_recovery');tarrant=load('certify_tarrant_2024_zeros');fortbend=load('audit_fortbend_native_returns')
 
 class BexarProofs(unittest.TestCase):
+ def test_uppercase_compact_polling_place_header_is_the_same_reviewed_layout(self):
+  ids,repeats,blanks=bexar.parse_pdf_text('NAME VUID POLLINGPLACE PRECINCT\nSYNTHETIC PERSON 1000000001 CENTER-EV P 1001\n')
+  self.assertEqual(ids,{'1000000001':'P 1001'})
+ def test_inventory_discovers_all_completed_dates_without_fixed_document_ids(self):
+  response={'Documents':[{'DisplayName':f'Early Vote Ballots - 2026-10-{day} - November 3, 2026 General Election','ID':9000+day} for day in range(19,31)]}
+  found=bexar.discover_documents(response,date(2026,10,30))
+  self.assertEqual(len(found),12);self.assertEqual(found['2026-10-30']['ID'],9030)
+  with self.assertRaises(ValueError):bexar.discover_documents({'Documents':response['Documents'][:-1]},date(2026,10,30))
+  with self.assertRaises(ValueError):bexar.discover_documents({'Documents':response['Documents']+[response['Documents'][0]]},date(2026,10,30))
  def test_blank_identity_marks_only_residence_label(self):
   text='Name VUID Polling Place Precinct\nSYNTHETIC PERSON 1000000001 CENTER-EV P 1001\nSYNTHETIC MISSING       CENTER-EV S 1002.01\n'
   ids,repeats,blanks=bexar.parse_pdf_text(text)
@@ -20,17 +30,26 @@ class BexarProofs(unittest.TestCase):
  def test_duplicate_different_record_rejected(self):
   ids,repeats,invalid=bexar.parse_pdf_text('Name VUID Polling Place Precinct\nSYNTHETIC PERSON 1000000001 CENTER-EV P 1001\nSYNTHETIC PERSON 1000000001 OTHER-EV P 1001\nSYNTHETIC OTHER 1000000002 CENTER-EV P 2001\n')
   self.assertEqual(ids,{'1000000002':'P 2001'});self.assertEqual(invalid,{'P 1001':2})
- def test_proof_is_unique_across_dates_and_only_repairs_unknown_sos_labels(self):
+ def test_foreign_association_also_invalidates_native_alias_uniqueness(self):
   results=[dict(when='2026-10-19',source='county',sha256='a'*64,state_source='state',state_sha256='b'*64,identities={'a':'S 1001.01','b':'S 1001.01','c':'P 2001','d':'P 3001'},state={'a':'1001','b':'11','c':'2001','d':'1001'},blank_labels={},repeats=0,pages=1)]
   metadata={'2026-10-19':{'DisplayName':'synthetic official title'}}
   bundle=bexar.aggregate(results,{'1001','2001','3001'},metadata)
   repaired=bundle['repaired_state_observations'][0]['counts']
-  self.assertEqual(repaired,{'1001':3,'2001':1});self.assertEqual(bundle['days'][0]['reassignments'],[{'source_label':'11','county_label':'S 1001.01','native_precinct':'1001','votes':1}])
+  self.assertEqual(repaired,{'1001':2,'11':1,'2001':1});self.assertEqual(bundle['days'][0]['reassignments'],[])
+  self.assertEqual(bundle['aliases']['S 1001.01']['matches'],{'1001':1,'11':1})
   # A label with two mapped targets cannot justify any reassignment.
   results[0]['identities']['c']='S 1001.01'
   bundle=bexar.aggregate(results,{'1001','2001','3001'},metadata)
   self.assertIsNone(bundle['aliases']['S 1001.01']['target'])
   self.assertEqual(bundle['repaired_state_observations'][0]['counts']['11'],1)
+ def test_state_identity_repeated_across_dates_cannot_supply_or_receive_repair(self):
+  first=dict(when='2026-10-19',source='county',sha256='a'*64,state_source='state',state_sha256='b'*64,identities={'a':'P 1001','b':'P 1001'},state={'a':'11','b':'1001'},blank_labels={},repeats=0,pages=1)
+  second=dict(when='2026-10-20',source='county',sha256='c'*64,state_source='state',state_sha256='d'*64,identities={'c':'P 1001'},state={'a':'11','c':'1001'},blank_labels={},repeats=0,pages=1)
+  metadata={d:{'DisplayName':'synthetic'} for d in ['2026-10-19','2026-10-20']}
+  bundle=bexar.aggregate([first,second],{'1001'},metadata)
+  self.assertEqual(bundle['aliases']['P 1001']['matches'],{'1001':2})
+  self.assertEqual([x['counts']['11'] for x in bundle['repaired_state_observations']],[1,1])
+  self.assertEqual([x['reassignments'] for x in bundle['days']],[[],[]])
  def test_quarantine_does_not_remove_unrelated_cells(self):
   results=[dict(when='2026-10-19',source='county',sha256='a'*64,state_source='state',state_sha256='b'*64,identities={'a':'P 1001','b':'P 2001'},state={'a':'1001','b':'2001'},blank_labels={'P 1001':1},repeats=0,pages=1)]
   bundle=bexar.aggregate(results,{'1001','2001'},{'2026-10-19':{'DisplayName':'test'}})
