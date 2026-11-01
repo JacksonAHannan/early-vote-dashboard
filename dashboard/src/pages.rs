@@ -38,7 +38,8 @@ impl Publisher<'_> {
         let name = format!("api-data/{hash}.json.gz");
         let path = self.out.join(&name);
         if !path.exists() {
-            let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
+            // Keep full query responses within the Pages budget as turnout grows.
+            let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
             encoder.write_all(&bytes)?;
             let compressed = encoder.finish()?;
             std::fs::write(&path, compressed)?;
@@ -563,6 +564,45 @@ fn copy_static(root: &Path, out: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn public_geometry_compression_preserves_pages_headroom() {
+        use std::io::Read;
+        let dir = std::env::temp_dir().join(format!(
+            "turnout-pages-compression-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap()
+        ));
+        std::fs::create_dir_all(dir.join("api-data")).unwrap();
+        let geometry: Value =
+            serde_json::from_str(include_str!("../geography/texas-counties.geojson")).unwrap();
+        let original = serde_json::to_vec(&geometry).unwrap();
+        let mut fast = GzEncoder::new(Vec::new(), Compression::fast());
+        fast.write_all(&original).unwrap();
+        let fast_bytes = fast.finish().unwrap().len() as u64;
+        let mut publisher = Publisher {
+            out: &dir,
+            routes: BTreeMap::new(),
+            states: BTreeMap::new(),
+            precincts: BTreeMap::new(),
+            artifacts: 0,
+            bytes: 0,
+            seen: BTreeSet::new(),
+        };
+        let file = publisher.store(&geometry).unwrap();
+        let mut decoded = Vec::new();
+        flate2::read::GzDecoder::new(std::fs::File::open(dir.join(file)).unwrap())
+            .read_to_end(&mut decoded)
+            .unwrap();
+        let compressed_bytes = publisher.bytes;
+        std::fs::remove_dir_all(dir).unwrap();
+        assert_eq!(decoded, original);
+        // The real map guards against returning to speed-first compression,
+        // which exhausted the hosting budget as observed turnout grew.
+        assert!(
+            compressed_bytes * 100 <= fast_bytes * 85,
+            "Map must be at least 15% smaller than fast gzip: {compressed_bytes} vs {fast_bytes}"
+        );
+    }
     #[test]
     fn gzip_roundtrip_and_reused_artifacts_have_stable_accounting() {
         use std::io::Read;

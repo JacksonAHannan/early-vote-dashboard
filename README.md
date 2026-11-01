@@ -46,7 +46,7 @@ To generate the Pages site:
 target/release/texas-turnout pages --output site
 ```
 
-Serve `site/` with a static HTTP server. No API server is required: Rust writes immutable compressed query outputs, and the browser adapter resolves selections beneath the repository URL prefix. Source refresh and static export use the same Rust comparison functions. The published site is checked against a 900 MB safety budget.
+Serve `site/` with a static HTTP server. No API server is required: Rust writes immutable compressed query outputs, and the browser adapter resolves selections beneath the repository URL prefix. Source refresh and static export use the same Rust comparison functions. Publication uses standard gzip compression to keep complete responses within the unchanged 900 MB safety budget. Use a fresh output directory when measuring publication size; existing content-addressed artifacts are reused. See [publication size verification](sources/pages-size/README.md).
 
 ## Verification
 
